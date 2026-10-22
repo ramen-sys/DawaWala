@@ -1,2 +1,15 @@
 .env
 venv
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+node_modules/
+
+# Raw downloaded KB sources (may have licence limits; keep processed files only)
+knowledge_base/raw/

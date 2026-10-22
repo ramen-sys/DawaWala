@@ -1,0 +1,17 @@
+class_name,duplication_relevant
+analgesic,false
+NSAID,true
+antiplatelet,false
+anticoagulant,true
+biguanide,false
+calcium channel blocker,true
+ACE inhibitor,true
+loop diuretic,true
+potassium-sparing diuretic,false
+statin,true
+macrolide antibiotic,false
+proton pump inhibitor,true
+dopamine antagonist antiemetic,false
+antiparkinson agent,false
+cholinesterase inhibitor,true
+antimuscarinic,true
