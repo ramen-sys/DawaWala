@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import Medication
+from app.models import Medication, MedicationAlias
 
 TEST_SCHEMA = f"test_{uuid.uuid4().hex[:10]}"
 
@@ -25,6 +25,8 @@ TEST_SCHEMA = f"test_{uuid.uuid4().hex[:10]}"
 def engine():
     base_engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
     with base_engine.begin() as conn:
+        # pg_trgm provides gin_trgm_ops for the name indexes; it is database-wide, not per schema.
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         conn.execute(text(f'CREATE SCHEMA "{TEST_SCHEMA}"'))
     test_engine = base_engine.execution_options(schema_translate_map={None: TEST_SCHEMA})
     Base.metadata.create_all(test_engine)
@@ -35,14 +37,23 @@ def engine():
     base_engine.dispose()
 
 
+def _medication(name: str, drug_class: str, aliases: list[str]) -> Medication:
+    return Medication(
+        standard_name=name,
+        drug_class=drug_class,
+        source="test fixture",
+        aliases=[MedicationAlias(alias=a) for a in aliases],
+    )
+
+
 def _seed_kb(test_engine) -> None:
+    """Small fixed knowledge base so list/normalization tests do not depend on the Kaggle import."""
     Session = sessionmaker(bind=test_engine)
     with Session() as db:
         db.add_all([
-            Medication(standard_name="Paracetamol", drug_class="Analgesic / antipyretic",
-                       aliases=["Panadol", "Calpol"]),
-            Medication(standard_name="Ibuprofen", drug_class="NSAID", aliases=["Brufen"]),
-            Medication(standard_name="Omeprazole", drug_class="Proton-pump inhibitor", aliases=["Risek", "Losec"]),
+            _medication("Paracetamol", "Analgesic / antipyretic", ["Panadol", "Calpol"]),
+            _medication("Ibuprofen", "NSAID", ["Brufen"]),
+            _medication("Omeprazole", "Proton-pump inhibitor", ["Risek", "Losec"]),
         ])
         db.commit()
 
@@ -81,7 +92,7 @@ def unique_email(prefix: str = "user") -> str:
 def make_user(client):
     """Register a user and return (credentials, auth headers)."""
 
-    def _make(password: str = "Secret123", role: str = "patient") -> tuple[dict, dict]:
+    def _make(password: str = "Secret123", role: str = "user") -> tuple[dict, dict]:
         creds = {"name": "Test User", "email": unique_email(), "password": password, "role": role}
         r = client.post("/api/v1/auth/register", json=creds)
         assert r.status_code == 201, r.text

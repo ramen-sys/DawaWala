@@ -22,7 +22,8 @@ class UserRegister(BaseModel):
     name: str = Field(min_length=1, max_length=100, examples=["Ali Khan"])
     email: EmailStr = Field(examples=["ali@example.com"])
     password: str = Field(examples=["Secret123"])
-    role: UserRole = UserRole.PATIENT
+    # FR-1: "user" (patient or healthcare professional) or "admin". Defaults to "user".
+    role: UserRole = UserRole.USER
 
     @field_validator("name")
     @classmethod

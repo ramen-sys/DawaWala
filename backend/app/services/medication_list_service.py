@@ -4,15 +4,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.errors import AppError
-from app.core.logging import log_auth_event
 from app.models import AnalysisResult, MedicationList, MedicationListItem, User
-from app.models.enums import ConfirmationFlag, ConfirmationStatus, Freshness, ListSource
+from app.models.enums import AuthEventType, ConfirmationFlag, ConfirmationStatus, Freshness, ListSource
 from app.schemas.medication_list import (
     MedicationItemOut,
     MedicationListOut,
     MedicationListSummary,
     MedicationRef,
 )
+from app.services.auth_event_service import record_event
 from app.services.normalization import confidence_label, normalize_name
 
 
@@ -63,7 +63,7 @@ def get_owned_list(db: Session, user: User, list_id: int, ip: str | None = None)
     if med_list is None:
         raise AppError(status.HTTP_404_NOT_FOUND, "list_not_found", "This medication list does not exist.")
     if med_list.user_id != user.id:
-        log_auth_event("authz_denied", user.id, ip)
+        record_event(db, AuthEventType.AUTHZ_DENIED, user.id, ip)
         raise AppError(status.HTTP_403_FORBIDDEN, "forbidden", "You do not have access to this medication list.")
     return med_list
 

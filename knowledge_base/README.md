@@ -11,10 +11,12 @@ Only the dataset columns that the SRS (Table 5.1, Medication and Contraindicatio
 
 | Dataset column | Goes to |
 |---|---|
-| Drug Name | `medications.aliases` (brand names) and, through the mapping, `medications.standard_name` |
+| Drug Name | `medication_aliases.alias` (brand names) and, through the mapping, `medications.standard_name` |
 | Indication | `medications.medication_info.indications` |
 | Side Effects | `medications.medication_info.side_effects` |
-| Age Restriction | `medications.medication_info.min_age_years`, and a `contraindications` row for `age_range:under_18` |
+| Age Restriction | `medications.medication_info.min_age_years`, and a `contraindications` row with `factor_type = age_range`, `factor_value = under_18` and rule code `CI-AGE-<NAME>` |
+
+Every imported medication and contraindication has `source` set to the dataset name and version (SRS 5.3).
 
 Manufacturer, Strength, Form, Available In, Prescription Required and Price are not used: the SRS
 does not store them (FR-6 discards strengths and dosage forms).

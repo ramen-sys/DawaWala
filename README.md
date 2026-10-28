@@ -72,8 +72,12 @@ Interactive API docs (OpenAPI / Swagger): <http://127.0.0.1:8000/docs>. Click **
 
 | E-mail | Password | Role |
 |---|---|---|
-| `demo@dawawala.pk` | `Demo1234` | Patient |
-| `doctor@dawawala.pk` | `Doctor1234` | Healthcare professional |
+| `demo@dawawala.pk` | `Demo1234` | `user` (patient) |
+| `doctor@dawawala.pk` | `Doctor1234` | `user` (healthcare professional) |
+| `admin@dawawala.pk` | `Admin1234` | `admin` (may maintain the knowledge base) |
+
+Roles follow FR-1: `user` covers patients and healthcare professionals (same workflow); `admin` is a
+healthcare professional who may also import/update knowledge-base records.
 
 The knowledge base comes from the Kaggle
 [Pakistan Medicines Dataset](https://www.kaggle.com/datasets/muhammadabdullah222/pakistan-medicines-dataset):
@@ -102,7 +106,9 @@ All endpoints are under `/api/v1`. Protected endpoints need `Authorization: Bear
 | GET | `/medications/search?q=` | Type-ahead suggestions from the knowledge base |
 | GET | `/medications/knowledge-base` | Knowledge-base version, date and coverage (SAF-07) |
 
-Authentication events are written to `backend/logs/auth.log` (rotated daily, kept 90 days; SEC-10).
+Authentication events and authorization failures (SEC-10) are stored in the `auth_events` table (user ID,
+event type, time, IP - never passwords, tokens or medications) and also written to `backend/logs/auth.log`.
+Both are kept for 90 days; the API deletes older `auth_events` rows at startup and then once a day.
 
 Editing a confirmed list returns it to `draft` and marks earlier analyses `outdated` (FR-7, SAF-08).
 Typed names are passed to `app/services/normalization.py`, which currently resolves only exact
@@ -110,11 +116,24 @@ standard-name / brand-name matches; the fuzzy matcher (FR-6) plugs in behind the
 
 ### Database migrations
 
-The schema is managed with Alembic in `backend/alembic/`. It has exactly the 12 entities of SRS Table 5.1, with
-their key attributes. The only additions are the state variables from Appendix A.2 that need storage:
-`users.failed_login_attempts` / `users.locked_until` (account lock state, FR-2) and `analysis_results.freshness`
-(SAF-08). An automated test (`tests/test_schema_and_import.py`) checks this. After changing a model in
-`backend/app/models/`:
+The schema is managed with Alembic in `backend/alembic/`. It implements the 12 entities of SRS Table 5.1
+(the "Warning" entity is the `warnings` table; its Python class is `AnalysisWarning`). Additions and why:
+
+| Addition | Reason |
+|---|---|
+| `users.failed_login_attempts`, `users.locked_until` | account lock state (Appendix A.2, FR-2) |
+| `analysis_results.freshness` | analysis freshness (Appendix A.2, SAF-08) |
+| `rule_code`, `source` on `drug_interactions`, `contraindications`, `cascade_rules` | rule ID carried by every warning in `warnings.rule_reference` (QA-EXP-04); data source recorded with the rules (Section 5.3) |
+| `medications.source`, `medications.external_code` | data source (5.3); optional external code such as ATC (5.4) |
+| `medication_aliases` table (pg_trgm index) | the Medication "Aliases/brand names" attribute as rows, so fuzzy matching meets PERF-03 |
+| `cascade_rule_triggers`, `cascade_rule_downstream` | the Cascade Rule medication sets, with real foreign keys |
+| `contraindications.factor_type` + `factor_value` | the "Patient condition/factor" attribute, validated with the same values as `risk_factors` |
+| `auth_events` | SEC-10 authentication log |
+
+CHECK constraints reject invalid factor values (for example `under18`) and unknown entries in
+`drug_interactions.relevant_risk_factors`. The knowledge-base version is global (`KB_VERSION`) and is stored on
+every analysis result. An automated test (`tests/test_schema_and_import.py`) checks all of this. After changing
+a model in `backend/app/models/`:
 
 ```bash
 alembic revision --autogenerate -m "describe the change"
