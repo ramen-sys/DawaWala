@@ -1,15 +1,16 @@
 # Safety engine (Member 3): FR-8, FR-9, FR-10, FR-12
 
-The engine takes a **confirmed** medication list and returns warnings. It
-does not touch the database, the API or the UI, so it can be tested on its
-own. Scoring (FR-11) and explanations (FR-13) happen after it.
+The engine takes a **confirmed** medication list and returns warnings. The
+detectors themselves do not query PostgreSQL: the caller loads the knowledge
+base from the database once, then passes it in. Scoring (FR-11) and
+explanations (FR-13) happen after it.
 
 ## How to call it (for Rameen: API layer)
 
 ```python
-from app.engine import ConfirmedItem, analyze, load_kb
+from app.engine import ConfirmedItem, analyze, load_kb_from_db
 
-kb = load_kb()          # once at start-up; raises KBValidationError if the KB is broken
+kb = load_kb_from_db(db)   # once at start-up; raises KBValidationError if a row is invalid
 
 items = [
     ConfirmedItem(item_id=101, medication_id=8,  entered_text="Norvasc"),
@@ -21,7 +22,7 @@ payload = result.to_dict()   # JSON-ready
 ```
 
 * Only call `analyze()` on a list whose status is `confirmed` (BR-01, SAF-01).
-* `risk_factors` keys and values come from `knowledge_base/data/risk_factors.csv`.
+* `risk_factors` keys and values are the SRS vocabulary enforced when the database rows are loaded.
   Missing keys count as `unknown`. An unknown key or value raises `ValueError`,
   which the API should return as HTTP 422.
 * The same list, factors and KB version always give identical output (QA-REL-01).

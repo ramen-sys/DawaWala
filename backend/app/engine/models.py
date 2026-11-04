@@ -1,9 +1,9 @@
 """Data types used by the safety engine (FR-8, FR-9, FR-10, FR-12).
 
 The engine works on plain Python objects so it can be developed and tested
-without the database, the API or the frontend. The knowledge base is loaded
-from CSV files today (see loader.py); later the same objects can be built
-from PostgreSQL without changing any detector.
+without the database, the API or the frontend. loader.py builds these
+objects from the CSV fixtures. db_loader.py builds the same objects from
+PostgreSQL, and the detectors do not change.
 """
 
 from __future__ import annotations

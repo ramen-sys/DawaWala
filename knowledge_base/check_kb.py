@@ -1,10 +1,9 @@
-"""Validate the knowledge base and show progress towards the release targets.
+"""Validate the knowledge base in PostgreSQL and show progress towards the release targets.
 
 Run from the repository root:
-    python knowledge_base/check_kb.py              # checks knowledge_base/data
-    python knowledge_base/check_kb.py path/to/kb   # checks another folder
+    python knowledge_base/check_kb.py
 
-Exits with code 1 if any file has errors, so it can also run in CI.
+Exits with code 1 if any rule is invalid, so it can also run in CI.
 """
 
 import sys
@@ -13,24 +12,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.engine.loader import DEFAULT_KB_DIR, KBValidationError, load_kb  # noqa: E402
+from app.db.session import SessionLocal  # noqa: E402
+from app.engine.db_loader import load_kb_from_db  # noqa: E402
+from app.engine.loader import KBValidationError  # noqa: E402
 
 # Release 1.0 minimums (SRS QA-COR-04 / Section 2.7)
 TARGETS = {"medications": 300, "interactions": 1000, "contraindications": 100, "cascade rules": 20}
 
 
 def main() -> int:
-    directory = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB_DIR
     try:
-        kb = load_kb(directory)
+        with SessionLocal() as db:
+            kb = load_kb_from_db(db)
     except KBValidationError as exc:
         print(exc)
         return 1
 
     counts = {
         "medications": len(kb.medications),
-        "interactions": sum(len(r) for r in kb.interactions.values()),
-        "contraindications": sum(len(r) for r in kb.contraindications.values()),
+        "interactions": sum(len(rules) for rules in kb.interactions.values()),
+        "contraindications": sum(len(rules) for rules in kb.contraindications.values()),
         "cascade rules": len(kb.cascades),
     }
     print(f"Knowledge base {kb.version} (updated {kb.updated}) is valid.\n")

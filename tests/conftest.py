@@ -6,6 +6,7 @@ so real data is never touched.
 """
 
 import uuid
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +15,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.db.base import Base
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
+from app.engine import ConfirmedItem, load_kb, load_kb_from_db
 from app.main import app
 from app.models import Medication
 
@@ -103,8 +105,9 @@ def kb():
 
 @pytest.fixture(scope="session")
 def real_kb():
-    """The knowledge base being curated in knowledge_base/data."""
-    return load_kb(DEFAULT_KB_DIR)
+    """The knowledge base stored in PostgreSQL."""
+    with SessionLocal() as db:
+        return load_kb_from_db(db)
 
 
 @pytest.fixture

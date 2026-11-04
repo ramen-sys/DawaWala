@@ -1,19 +1,7 @@
-<<<<<<< HEAD
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    database_url: str
-    jwt_secret: str
-
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
-
-
-settings = Settings()
-=======
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -31,7 +19,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
 
     DATABASE_URL: str
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = Field(validation_alias=AliasChoices("JWT_SECRET_KEY", "JWT_SECRET"))
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # TOKEN_TTL_MIN
     CORS_ORIGINS: str = "http://localhost:5173"
@@ -73,4 +61,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
->>>>>>> ad9157eef12a848d2b71f01802de4c4da9f1313a
