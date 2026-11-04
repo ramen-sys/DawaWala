@@ -35,6 +35,9 @@ def main() -> None:
         demo = check("login demo account", c.post(f"{API}/auth/login",
                      json={"email": "demo@dawawala.pk", "password": "Demo1234"}), 200)
         h = {"Authorization": f"Bearer {demo['access_token']}"}
+        admin = check("login admin account", c.post(f"{API}/auth/login",
+                      json={"email": "admin@dawawala.pk", "password": "Admin1234"}), 200)
+        print(f"        roles: demo={demo['user']['role']}, admin={admin['user']['role']}")
         kb = check("knowledge-base info", c.get(f"{API}/medications/knowledge-base", headers=h), 200)
         print(f"        KB v{kb['version']} ({kb['updated_on']}): {kb['medications']} medications, "
               f"{kb['contraindications']} contraindications")

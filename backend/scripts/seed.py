@@ -13,9 +13,12 @@ from app.models.enums import UserRole
 from app.services.medication_list_service import build_item
 from scripts import import_medicines
 
+# Patients and healthcare professionals both use the "user" role (FR-1); only the admin
+# account may maintain the knowledge base.
 DEMO_USERS = [
-    ("Demo Patient", "demo@dawawala.pk", "Demo1234", UserRole.PATIENT),
-    ("Dr. Demo Pharmacist", "doctor@dawawala.pk", "Doctor1234", UserRole.HEALTHCARE_PROFESSIONAL),
+    ("Demo Patient", "demo@dawawala.pk", "Demo1234", UserRole.USER),
+    ("Dr. Demo Pharmacist", "doctor@dawawala.pk", "Doctor1234", UserRole.USER),
+    ("Demo KB Admin", "admin@dawawala.pk", "Admin1234", UserRole.ADMIN),
 ]
 
 # Product names exactly as they appear on Pakistani packs (all present in the Kaggle dataset,
@@ -38,6 +41,7 @@ def seed_demo_users(db: Session) -> None:
             user = User(name=name, email=email, password_hash=hash_password(password), role=role)
             db.add(user)
             db.flush()
+        user.role = role  # also fixes demo accounts created before the User/Admin roles
         user.failed_login_attempts = 0
         user.locked_until = None
 

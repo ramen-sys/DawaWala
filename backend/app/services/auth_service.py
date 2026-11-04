@@ -5,12 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.logging import log_auth_event
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.security import DUMMY_PASSWORD_HASH, hash_password, verify_password
 from app.models import User
+from app.models.enums import AuthEventType
 from app.schemas.auth import UserRegister
+from app.services.auth_event_service import record_event
 
 GENERIC_LOGIN_ERROR = "Incorrect e-mail or password."
 
@@ -31,7 +32,7 @@ def register_user(db: Session, data: UserRegister, ip: str | None) -> User:
         db.rollback()
         raise _email_taken() from None
     db.refresh(user)
-    log_auth_event("register", user.id, ip)
+    record_event(db, AuthEventType.REGISTER, user.id, ip)
     return user
 
 
@@ -61,37 +62,39 @@ def authenticate_user(db: Session, email: str, password: str, ip: str | None) ->
     if user is None:
         verify_password(password, DUMMY_PASSWORD_HASH)
         db.rollback()
-        log_auth_event("login_failed", None, ip)
+        record_event(db, AuthEventType.LOGIN_FAILED, None, ip)
         raise AppError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", GENERIC_LOGIN_ERROR)
 
     if user.locked_until and user.locked_until > now:
         db.rollback()
-        log_auth_event("login_refused_locked", user.id, ip)
+        record_event(db, AuthEventType.LOGIN_REFUSED_LOCKED, user.id, ip)
         raise _locked_error(user.locked_until)
 
     if not verify_password(password, user.password_hash):
         user.failed_login_attempts += 1
-        log_auth_event("login_failed", user.id, ip)
+        record_event(db, AuthEventType.LOGIN_FAILED, user.id, ip, commit=False)
         if user.failed_login_attempts >= settings.MAX_FAILED_LOGINS:
             user.failed_login_attempts = 0
             user.locked_until = now + timedelta(minutes=settings.LOCKOUT_MIN)
+            record_event(db, AuthEventType.ACCOUNT_LOCKED, user.id, ip, commit=False)
             db.commit()
-            log_auth_event("account_locked", user.id, ip)
             raise _locked_error(user.locked_until)
         db.commit()
         raise AppError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", GENERIC_LOGIN_ERROR)
 
     user.failed_login_attempts = 0
     user.locked_until = None
+    record_event(db, AuthEventType.LOGIN_SUCCESS, user.id, ip, commit=False)
     db.commit()
     db.refresh(user)
-    log_auth_event("login_success", user.id, ip)
     return user
 
 
 def delete_user(db: Session, user: User, ip: str | None) -> None:
-    """SEC-08: removes the account and, via ON DELETE CASCADE, all lists, items, images, factors and results."""
-    user_id = user.id
+    """SEC-08: removes the account and, via ON DELETE CASCADE, all lists, items, images, factors and results.
+
+    The deletion event is recorded without a user ID, because the account no longer exists.
+    """
     db.delete(user)
+    record_event(db, AuthEventType.ACCOUNT_DELETED, None, ip, commit=False)
     db.commit()
-    log_auth_event("account_deleted", user_id, ip)

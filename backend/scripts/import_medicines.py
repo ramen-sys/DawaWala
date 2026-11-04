@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models import Contraindication, Medication
+from app.models import Contraindication, Medication, MedicationAlias
 from app.models.enums import FactorType, Severity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +27,18 @@ KAGGLE_REF = "muhammadabdullah222/pakistan-medicines-dataset"
 SOURCE = "Kaggle: Pakistan Medicines Dataset (muhammadabdullah222), version 3"
 
 USED_COLUMNS = ["Drug Name", "Indication", "Side Effects", "Age Restriction"]
-UNDER_18 = f"{FactorType.AGE_RANGE.value}:under_18"
+# Age restrictions become contraindications for the "under 18" age range (FR-14 age buckets).
+AGE_FACTOR_TYPE = FactorType.AGE_RANGE
+AGE_FACTOR_VALUE = "under_18"
+
+
+def age_rule_code(standard_name: str) -> str:
+    """Stable rule code for an age contraindication, e.g. "Ibuprofen + Pseudoephedrine" -> "CI-AGE-IBUPROFEN-PSEUDOEPHEDRINE".
+
+    Built from the medication name (not the DB id) so it is the same on every database and every re-import.
+    """
+    slug = re.sub(r"[^A-Z0-9]+", "-", standard_name.upper()).strip("-")
+    return f"CI-AGE-{slug}"[:50]
 
 
 def download_from_kaggle() -> None:
@@ -96,8 +107,8 @@ def build_records(rows: pd.DataFrame) -> tuple[list[dict], dict[str, int | None]
                     "indications": split_terms(group["Indication"]),
                     "side_effects": split_terms(group["Side Effects"]),
                     "min_age_years": min_age,
-                    "source": SOURCE,
                 },
+                "source": SOURCE,
             }
         )
     return medications, min_ages
@@ -120,42 +131,67 @@ def age_description(min_age: int) -> str:
 
 
 def import_into_db(db: Session, medications: list[dict], min_ages: dict[str, int | None]) -> tuple[int, int]:
-    stmt = insert(Medication).values(medications)
+    """Upsert medications, their aliases and age contraindications. Safe to run repeatedly.
+
+    Returns (number of medications, number of age contraindications).
+    """
+    # 1. Medications: insert new ones, update existing ones (matched by standard_name).
+    med_rows = [{k: m[k] for k in ("standard_name", "drug_class", "medication_info", "source")} for m in medications]
+    stmt = insert(Medication).values(med_rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=[Medication.standard_name],
         set_={
-            "aliases": stmt.excluded.aliases,
             "drug_class": stmt.excluded.drug_class,
             "medication_info": stmt.excluded.medication_info,
+            "source": stmt.excluded.source,
         },
     ).returning(Medication.id, Medication.standard_name)
     ids = {name: med_id for med_id, name in db.execute(stmt).all()}
 
+    # 2. Aliases: replace the alias rows of every imported medication with the dataset's brand names.
+    db.execute(delete(MedicationAlias).where(MedicationAlias.medication_id.in_(ids.values())))
+    alias_rows = [
+        {"medication_id": ids[m["standard_name"]], "alias": alias} for m in medications for alias in m["aliases"]
+    ]
+    if alias_rows:
+        db.execute(insert(MedicationAlias).values(alias_rows))
+
+    # 3. Age contraindications for medications with a minimum age on the label.
     restricted = {name: age for name, age in min_ages.items() if age}
     if restricted:
         ci = insert(Contraindication).values(
             [
                 {
+                    "rule_code": age_rule_code(name),
                     "medication_id": ids[name],
-                    "patient_condition": UNDER_18,
+                    "factor_type": AGE_FACTOR_TYPE,
+                    "factor_value": AGE_FACTOR_VALUE,
                     "description": age_description(age),
                     "severity": age_severity(age),
+                    "source": SOURCE,
                 }
                 for name, age in restricted.items()
             ]
         )
         ci = ci.on_conflict_do_update(
-            constraint="uq_contraindications_med_condition",
-            set_={"description": ci.excluded.description, "severity": ci.excluded.severity},
+            constraint="uq_contraindications_med_factor",
+            set_={
+                "rule_code": ci.excluded.rule_code,
+                "description": ci.excluded.description,
+                "severity": ci.excluded.severity,
+                "source": ci.excluded.source,
+            },
         )
         db.execute(ci)
 
+    # 4. Remove age contraindications that the dataset no longer has (e.g. restriction lifted).
     unrestricted_ids = [ids[name] for name in min_ages if name not in restricted]
     if unrestricted_ids:
         db.execute(
             delete(Contraindication).where(
                 Contraindication.medication_id.in_(unrestricted_ids),
-                Contraindication.patient_condition == UNDER_18,
+                Contraindication.factor_type == AGE_FACTOR_TYPE,
+                Contraindication.factor_value == AGE_FACTOR_VALUE,
             )
         )
     db.commit()

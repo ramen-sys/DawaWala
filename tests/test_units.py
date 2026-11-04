@@ -19,7 +19,7 @@ def test_hash_and_verify_password():
 
 
 def test_token_roundtrip():
-    token, ttl = create_access_token(42, "patient")
+    token, ttl = create_access_token(42, "user")
     assert ttl == 1800
     assert decode_access_token(token) == 42
     assert decode_access_token("garbage") is None

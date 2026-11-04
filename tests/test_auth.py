@@ -4,17 +4,19 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import settings
-from app.models import User
+from app.models import AuthEvent, User
+from app.models.enums import AuthEventType
+from app.services.auth_event_service import purge_old_events
 from tests.conftest import unique_email
 
 API = "/api/v1/auth"
 
 
 def register(client, **overrides):
-    body = {"name": "Ali Khan", "email": unique_email(), "password": "Secret123", "role": "patient"}
+    body = {"name": "Ali Khan", "email": unique_email(), "password": "Secret123", "role": "user"}
     body.update(overrides)
     return client.post(f"{API}/register", json=body), body
 
@@ -27,14 +29,21 @@ def test_register_success_returns_user_without_password(client):
     data = r.json()
     assert data["message"]
     assert data["user"]["email"] == body["email"].lower()
-    assert data["user"]["role"] == "patient"
+    assert data["user"]["role"] == "user"
     assert "password" not in str(data).lower()
 
 
-def test_register_healthcare_professional_role(client):
-    r, _ = register(client, role="healthcare_professional")
+def test_register_admin_role(client):
+    r, _ = register(client, role="admin")
     assert r.status_code == 201
-    assert r.json()["user"]["role"] == "healthcare_professional"
+    assert r.json()["user"]["role"] == "admin"
+
+
+def test_role_defaults_to_user(client):
+    body = {"name": "No Role", "email": unique_email(), "password": "Secret123"}
+    r = client.post(f"{API}/register", json=body)
+    assert r.status_code == 201
+    assert r.json()["user"]["role"] == "user"
 
 
 def test_password_stored_as_bcrypt_hash(client, db):
@@ -68,9 +77,10 @@ def test_register_password_rules(client):
 
 
 def test_register_invalid_role_and_blank_name(client):
-    r, _ = register(client, role="admin")
-    assert r.status_code == 422
-    assert "role" in r.json()["fields"]
+    for old_role in ("patient", "healthcare_professional", "superuser"):
+        r, _ = register(client, role=old_role)
+        assert r.status_code == 422, old_role
+        assert "role" in r.json()["fields"]
     r, _ = register(client, name="   ")
     assert r.status_code == 422
     assert "name" in r.json()["fields"]
@@ -149,6 +159,59 @@ def test_auth_events_logged_without_secrets(client, caplog):
     joined = "\n".join(messages)
     assert body["password"] not in joined and "Wrong1234" not in joined
     assert token["access_token"] not in joined and body["email"] not in joined
+
+
+def test_auth_events_stored_in_table(client, db):
+    r, body = register(client)
+    user_id = r.json()["user"]["id"]
+    client.post(f"{API}/login", json={"email": body["email"], "password": "Wrong1234"})
+    client.post(f"{API}/login", json={"email": body["email"], "password": body["password"]})
+
+    events = db.scalars(select(AuthEvent).where(AuthEvent.user_id == user_id).order_by(AuthEvent.id)).all()
+    assert [e.event_type for e in events] == [
+        AuthEventType.REGISTER, AuthEventType.LOGIN_FAILED, AuthEventType.LOGIN_SUCCESS
+    ]
+    assert all(e.ip_address and e.created_at for e in events)
+    # The table has no column that could hold a password, token, e-mail or medication.
+    assert set(AuthEvent.__table__.columns.keys()) == {"id", "user_id", "event_type", "ip_address", "created_at"}
+
+
+def test_failed_login_for_unknown_email_is_stored_without_user(client, db):
+    email = unique_email("ghost")
+    before = db.scalar(select(func.count()).select_from(AuthEvent).where(AuthEvent.user_id.is_(None)))
+    client.post(f"{API}/login", json={"email": email, "password": "Wrong1234"})
+    after = db.scalar(select(func.count()).select_from(AuthEvent).where(AuthEvent.user_id.is_(None)))
+    assert after == before + 1
+
+
+def test_lockout_and_forbidden_access_are_stored(client, make_user, db):
+    _, body = register(client)
+    for _ in range(5):
+        client.post(f"{API}/login", json={"email": body["email"], "password": "Wrong1234"})
+    user = db.scalar(select(User).where(User.email == body["email"]))
+    types = db.scalars(select(AuthEvent.event_type).where(AuthEvent.user_id == user.id)).all()
+    assert AuthEventType.ACCOUNT_LOCKED in types
+
+    _, owner = make_user()
+    lst = client.post("/api/v1/medication-lists", json={"names": ["Panadol"]}, headers=owner).json()
+    intruder_creds, intruder = make_user()
+    assert client.get(f"/api/v1/medication-lists/{lst['id']}", headers=intruder).status_code == 403
+    intruder_id = db.scalar(select(User.id).where(User.email == intruder_creds["email"]))
+    types = db.scalars(select(AuthEvent.event_type).where(AuthEvent.user_id == intruder_id)).all()
+    assert AuthEventType.AUTHZ_DENIED in types
+
+
+def test_auth_events_older_than_90_days_are_purged(db):
+    now = datetime.now(timezone.utc)
+    old = AuthEvent(event_type=AuthEventType.LOGIN_FAILED, ip_address="10.0.0.1", created_at=now - timedelta(days=91))
+    recent = AuthEvent(event_type=AuthEventType.LOGIN_FAILED, ip_address="10.0.0.2", created_at=now - timedelta(days=89))
+    db.add_all([old, recent])
+    db.commit()
+    old_id, recent_id = old.id, recent.id
+
+    assert purge_old_events(db, now) >= 1
+    assert db.get(AuthEvent, old_id) is None
+    assert db.get(AuthEvent, recent_id) is not None
 
 
 # ---------- Protected endpoints / JWT ----------

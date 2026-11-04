@@ -25,12 +25,19 @@ class AnalysisResult(Base):
 
 
 class AnalysisWarning(Base):
+    """The "Warning" entity of Table 5.1, stored in table ``warnings``.
+
+    The Python class is called AnalysisWarning only to avoid clashing with Python's built-in Warning.
+    """
+
     __tablename__ = "warnings"
     __table_args__ = (sa.CheckConstraint("score >= 0 AND score <= 100", name="score_range"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     analysis_id: Mapped[int] = mapped_column(sa.ForeignKey("analysis_results.id", ondelete="CASCADE"), index=True)
     category: Mapped[WarningCategory] = mapped_column(enum_column(WarningCategory, "warning_category"))
+    # rule_code of the KB rule that produced the warning (e.g. "DDI-0001", "CI-AGE-CLONAZEPAM").
+    # Duplicate warnings, which come from no KB row, use a fixed code such as "DUP-SAME".
     rule_reference: Mapped[str] = mapped_column(sa.String(50))
     related_medications: Mapped[list[dict]] = mapped_column(JSONB, default=list)
     score: Mapped[int]
