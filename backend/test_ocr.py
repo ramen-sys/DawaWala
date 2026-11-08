@@ -9,7 +9,7 @@ def test_engine():
     engine=Tesseract_engine()
    
 
-    image_path = backend_dir / "samples" / "medical_sample.jpg"
+    image_path = backend_dir / "samples" / "medical_sample3.jpg"
     
     if not image_path.exists():
         print(f"Error: Could not find image at {image_path}")
