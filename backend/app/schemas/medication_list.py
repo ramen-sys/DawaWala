@@ -64,6 +64,27 @@ class MedicationListOut(MedicationListSummary):
     items: list[MedicationItemOut]
 
 
+class MedicationCandidate(BaseModel):
+    medication_id: int
+    standard_name: str
+    matched_alias: str
+    match_score: int
+    label: ConfidenceLabel
+
+
+class OCRLineOut(BaseModel):
+    item_id: int
+    text: str
+    confidence: float
+    candidates: list[MedicationCandidate]
+
+
+class OCRMedicationListOut(BaseModel):
+    image_id: int
+    medication_list: MedicationListOut
+    extracted_lines: list[OCRLineOut]
+
+
 class MedicationSearchResult(BaseModel):
     id: int
     standard_name: str

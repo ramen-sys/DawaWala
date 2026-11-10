@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal, engine
-from app.routers import auth, medication_lists, medications
+from app.routers import auth, confirmation, medication_lists, medications
 from app.services.auth_event_service import purge_old_events
 
 configure_logging()
@@ -65,6 +65,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 app.include_router(auth.router, prefix=settings.API_PREFIX)
+app.include_router(confirmation.router, prefix=settings.API_PREFIX)
 app.include_router(medication_lists.router, prefix=settings.API_PREFIX)
 app.include_router(medications.router, prefix=settings.API_PREFIX)
 

@@ -1,5 +1,4 @@
 from app.ocr.engine import OCRLine,OCR_engine
-import io
 import shutil
 from PIL import Image
 import pytesseract
@@ -74,7 +73,7 @@ class Tesseract_engine(OCR_engine):
         data2=pytesseract.image_to_data(image=image,config=custom_config2,output_type=pytesseract.Output.DICT)
 
         data=self._merge_data(data1,data2)
-        MIN_CONFIDENCE=35.0#inore nois below 40 % confidence
+        MIN_CONFIDENCE=35.0
 
         lines_dict={}
         n_boxes=len(data["text"])
@@ -100,7 +99,7 @@ class Tesseract_engine(OCR_engine):
                 continue
             line_text = " ".join(w[0] for w in words_and_confs).strip()
             clean_text = re.sub(r'^[^\w]+|[^\w]+$', '', line_text)
-            if len(line_text) <= 2 and not any(char.isdigit() for char in line_text):
+            if not clean_text or (len(clean_text) <= 2 and not any(char.isdigit() for char in clean_text)):
                 continue
             ocr_lines.append(OCRLine(text=clean_text, confidence=round(avg_conf, 2)))
 

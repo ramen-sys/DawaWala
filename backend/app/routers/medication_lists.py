@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, File, Request, UploadFile, status
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, DbSession, client_ip
 from app.schemas.common import ErrorResponse
 from app.schemas.medication_list import (
@@ -7,8 +8,9 @@ from app.schemas.medication_list import (
     MedicationListOut,
     MedicationListSummary,
     MedicationNames,
+    OCRMedicationListOut,
 )
-from app.services import medication_list_service as svc
+from app.services import medication_list_service as svc, ocr_service
 
 router = APIRouter(
     prefix="/medication-lists",
@@ -29,6 +31,26 @@ router = APIRouter(
 )
 def create_list(data: MedicationNames, user: CurrentUser, db: DbSession):
     return svc.to_detail(svc.create_list(db, user, data.names))
+
+
+@router.post(
+    "/from-image",
+    response_model=OCRMedicationListOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="FR-4/FR-5: Create a draft medication list from an image",
+)
+def create_list_from_image(
+    user: CurrentUser,
+    db: DbSession,
+    image: UploadFile = File(..., description="JPEG, PNG, or WebP prescription/medicine image"),
+):
+    image_bytes = image.file.read(settings.MAX_IMAGE_BYTES + 1)
+    result = ocr_service.create_list_from_image(db, user, image_bytes)
+    return {
+        "image_id": result.image_id,
+        "medication_list": result.medication_list,
+        "extracted_lines": result.extracted_lines,
+    }
 
 
 @router.get("", response_model=list[MedicationListSummary], summary="History: my medication lists")
