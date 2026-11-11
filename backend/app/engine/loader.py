@@ -27,6 +27,7 @@ from .models import (
     InteractionRule,
     KnowledgeBase,
     Medication,
+    product_ingredients,
 )
 
 # backend/app/engine/loader.py -> repo root is three levels above "engine"
@@ -178,7 +179,7 @@ def load_kb(directory: str | Path = DEFAULT_KB_DIR) -> KnowledgeBase:
         for cls in med_classes:
             if cls not in classes:
                 errors.append(f"{where}: class '{cls}' is not in drug_classes.csv")
-        medications[med_id] = Medication(med_id, name, med_classes, aliases)
+        medications[med_id] = Medication(med_id, name, med_classes, aliases, product_ingredients(name, None))
         by_name[name.lower()] = med_id
 
     # Aliases must point to exactly one medication, and must not clash with

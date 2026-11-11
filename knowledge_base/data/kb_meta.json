@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
-  "updated": "2026-10-20",
-  "note": "Seed knowledge base for development. Not clinically reviewed (SAF-09)."
+  "version": "0.3.0",
+  "updated": "2026-11-04",
+  "note": "Curated rules evidence-checked against published sources on 2026-11-04. Not yet clinically approved (SAF-09): see knowledge_base/review/. Must match KB_VERSION / KB_UPDATED_ON in backend/app/core/config.py."
 }

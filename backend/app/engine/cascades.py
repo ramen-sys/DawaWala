@@ -26,9 +26,13 @@ from .models import (
 
 def _members(med_ids: list[int], meds: frozenset[int], classes: frozenset[str],
              kb: KnowledgeBase) -> list[int]:
+    """List medications that match by themselves or through one of their active ingredients."""
     return [
         m for m in med_ids
-        if m in meds or classes.intersection(kb.medications[m].classes)
+        if any(
+            c in meds or classes.intersection(kb.medications[c].classes)
+            for c in kb.with_components(m)
+        )
     ]
 
 

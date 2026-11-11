@@ -1,21 +1,21 @@
 medication_id,standard_name,classes,aliases
-1,paracetamol,analgesic,Panadol;Calpol
-2,ibuprofen,NSAID,Brufen;Advil
-3,naproxen,NSAID,Naprosyn
-4,aspirin,antiplatelet,Disprin
-5,warfarin,anticoagulant,Coumadin
-6,clopidogrel,antiplatelet,Plavix
-7,metformin,biguanide,Glucophage
-8,amlodipine,calcium channel blocker,Norvasc
-9,lisinopril,ACE inhibitor,Zestril
-10,furosemide,loop diuretic,Lasix
-11,spironolactone,potassium-sparing diuretic,Aldactone
-12,simvastatin,statin,Zocor
-13,atorvastatin,statin,Lipitor
-14,clarithromycin,macrolide antibiotic,Klaricid
-15,omeprazole,proton pump inhibitor,Losec;Risek
-16,esomeprazole,proton pump inhibitor,Nexium
-17,metoclopramide,dopamine antagonist antiemetic,Maxolon
-18,levodopa-carbidopa,antiparkinson agent,Sinemet
-19,donepezil,cholinesterase inhibitor,Aricept
-20,oxybutynin,antimuscarinic,Ditropan
+1,Paracetamol,Analgesic / antipyretic,Panadol;Calpol
+2,Ibuprofen,NSAID,Brufen;Advil
+3,Naproxen,NSAID,Naprosyn
+4,Aspirin,Salicylate,Disprin
+5,Warfarin,Anticoagulant,Coumadin
+6,Clopidogrel,Antiplatelet,Plavix
+7,Metformin,Biguanide,Glucophage
+8,Amlodipine,Calcium channel blocker,Norvasc
+9,Lisinopril,ACE inhibitor,Zestril
+10,Furosemide,Loop diuretic,Lasix
+11,Spironolactone,Potassium-sparing diuretic,Aldactone
+12,Simvastatin,Statin,Zocor
+13,Atorvastatin,Statin,Lipitor
+14,Clarithromycin,Macrolide antibiotic,Klaricid
+15,Omeprazole,Proton-pump inhibitor,Losec;Risek
+16,Esomeprazole,Proton-pump inhibitor,Nexium
+17,Metoclopramide,Dopamine antagonist antiemetic,Maxolon
+18,Levodopa + Carbidopa,Antiparkinson agent,Sinemet
+19,Donepezil,Cholinesterase inhibitor,Aricept
+20,Oxybutynin,Antimuscarinic,Ditropan

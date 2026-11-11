@@ -1,4 +1,5 @@
-"""Idempotent demo seed: imports the Kaggle knowledge base, then creates demo accounts with sample lists.
+"""Idempotent demo seed: imports the Kaggle knowledge base and the curated safety rules,
+then creates demo accounts with sample lists.
 
 Run from the backend/ directory:  python -m scripts.seed
 """
@@ -11,7 +12,7 @@ from app.db.session import SessionLocal
 from app.models import MedicationList, User
 from app.models.enums import UserRole
 from app.services.medication_list_service import build_item
-from scripts import import_medicines
+from scripts import import_kb_rules, import_medicines
 
 # Patients and healthcare professionals both use the "user" role (FR-1); only the admin
 # account may maintain the knowledge base.
@@ -67,9 +68,12 @@ def main() -> None:
     medications, min_ages = import_medicines.build_records(rows)
     with SessionLocal() as db:
         n_meds, n_ci = import_medicines.import_into_db(db, medications, min_ages)
+        # Must run after the Kaggle import, which replaces the aliases of its medications.
+        rules = import_kb_rules.import_rules(db, import_kb_rules.load_curated())
         seed_demo_users(db)
         db.commit()
     print(f"Knowledge base: {n_meds} medications, {n_ci} age contraindications (from Kaggle dataset)")
+    print("Curated rules: " + ", ".join(f"{n} {name}" for name, n in rules.items()))
     for _, email, password, role in DEMO_USERS:
         print(f"Demo account: {email} / {password} ({role.value})")
 

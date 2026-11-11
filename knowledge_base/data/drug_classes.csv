@@ -1,17 +1,18 @@
 class_name,duplication_relevant
-analgesic,false
+Analgesic / antipyretic,true
 NSAID,true
-antiplatelet,false
-anticoagulant,true
-biguanide,false
-calcium channel blocker,true
+Salicylate,false
+Antiplatelet,false
+Anticoagulant,true
+Biguanide,false
+Calcium channel blocker,true
 ACE inhibitor,true
-loop diuretic,true
-potassium-sparing diuretic,false
-statin,true
-macrolide antibiotic,false
-proton pump inhibitor,true
-dopamine antagonist antiemetic,false
-antiparkinson agent,false
-cholinesterase inhibitor,true
-antimuscarinic,true
+Loop diuretic,true
+Potassium-sparing diuretic,false
+Statin,true
+Macrolide antibiotic,true
+Proton-pump inhibitor,true
+Dopamine antagonist antiemetic,false
+Antiparkinson agent,false
+Cholinesterase inhibitor,true
+Antimuscarinic,true

@@ -8,7 +8,9 @@ PostgreSQL, and the detectors do not change.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
+from functools import cached_property
 from typing import Any, Mapping
 
 # Severity scale shared by interaction and contraindication records.
@@ -35,6 +37,29 @@ Factor = tuple[str, str]
 def format_factors(factors: tuple[Factor, ...]) -> tuple[str, ...]:
     """Turn (factor, value) pairs into "factor:value" strings."""
     return tuple(f"{name}:{value}" for name, value in factors)
+
+
+# Products applied locally (skin, eye, mouth) are named like "Metronidazole (topical)".
+# They are kept out of ingredient matching: metronidazole cream is not a duplicate of
+# metronidazole tablets, and it does not carry the tablets' interactions.
+_LOCAL_PRODUCT = re.compile(r"\((topical|eye|oral gel)\)\s*$", re.IGNORECASE)
+
+
+def is_local_product(standard_name: str) -> bool:
+    return bool(_LOCAL_PRODUCT.search(standard_name))
+
+
+def ingredients_from_name(standard_name: str) -> tuple[str, ...]:
+    """"Paracetamol + Caffeine" -> ("Paracetamol", "Caffeine"); used when no ingredient list is stored."""
+    return tuple(part.strip() for part in standard_name.split(" + ") if part.strip())
+
+
+def product_ingredients(standard_name: str, stored: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    """Active ingredients used for matching: () for local products, else the stored list or the name."""
+    if is_local_product(standard_name):
+        return ()
+    cleaned = tuple(i.strip() for i in (stored or ()) if i and i.strip())
+    return cleaned or ingredients_from_name(standard_name)
 
 
 def matched_factors(
@@ -65,6 +90,9 @@ class Medication:
     standard_name: str
     classes: tuple[str, ...]
     aliases: tuple[str, ...]
+    # Active ingredients, e.g. ("Ibuprofen", "Pseudoephedrine"). Empty for local products
+    # and for medications loaded without ingredient data (then only the medication itself counts).
+    ingredients: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -120,6 +148,30 @@ class KnowledgeBase:
         """Interaction records for an unordered pair of medications."""
         key = (a, b) if a < b else (b, a)
         return self.interactions.get(key, ())
+
+    @cached_property
+    def components(self) -> Mapping[int, tuple[int, ...]]:
+        """medication id -> ids of the *other* medications that are its active ingredients.
+
+        "Ibuprofen + Pseudoephedrine" -> (id of Ibuprofen,) when Ibuprofen is in the KB. A combination
+        product therefore inherits its ingredients' interaction, contraindication and cascade rules.
+        Only single-ingredient medications are used as components.
+        """
+        single = {
+            med.ingredients[0].lower(): med.medication_id
+            for med in self.medications.values()
+            if len(med.ingredients) == 1 and med.ingredients[0].lower() == med.standard_name.lower()
+        }
+        result = {}
+        for med in self.medications.values():
+            ids = sorted({single[i.lower()] for i in med.ingredients if i.lower() in single} - {med.medication_id})
+            if ids:
+                result[med.medication_id] = tuple(ids)
+        return result
+
+    def with_components(self, medication_id: int) -> tuple[int, ...]:
+        """The medication itself followed by its ingredient medications."""
+        return (medication_id,) + self.components.get(medication_id, ())
 
     def name(self, medication_id: int) -> str:
         return self.medications[medication_id].standard_name

@@ -26,6 +26,8 @@ from tests.conftest import TEST_SCHEMA, unique_email
 # * analysis_results.freshness                 - analysis.freshness (Appendix A.2)
 # * rule_code / source on KB rule tables       - rule identifier (QA-EXP-04) and data source (Section 5.3)
 # * medications.source / external_code         - data source (5.3) and optional external code (5.4)
+# * contraindications / cascade_rules           - patient-factor modifier (+5 each, Table 5.2), same
+#   .relevant_risk_factors                       "factor:value" format as drug_interactions
 # Helper tables: medication_aliases (Medication "Aliases/brand names"), cascade_rule_triggers /
 # cascade_rule_downstream (Cascade Rule "Triggering / Downstream medication(s)") and auth_events (SEC-10).
 SRS_TABLES = {
@@ -40,8 +42,8 @@ SRS_TABLES = {
     "drug_interactions": {"id", "rule_code", "drug_a_id", "drug_b_id", "description", "severity",
                           "relevant_risk_factors", "source"},
     "contraindications": {"id", "rule_code", "medication_id", "factor_type", "factor_value", "description",
-                          "severity", "source"},
-    "cascade_rules": {"id", "rule_code", "symptom_pattern", "description", "source"},
+                          "severity", "relevant_risk_factors", "source"},
+    "cascade_rules": {"id", "rule_code", "symptom_pattern", "description", "relevant_risk_factors", "source"},
     "cascade_rule_triggers": {"rule_id", "medication_id"},
     "cascade_rule_downstream": {"rule_id", "medication_id"},
     "risk_factors": {"id", "user_id", "list_id", "factor_type", "factor_value"},

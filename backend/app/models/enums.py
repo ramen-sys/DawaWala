@@ -93,8 +93,31 @@ def factor_pair_check_sql(type_col: str = "factor_type", value_col: str = "facto
 
 
 def factor_type_array_check_sql(column: str) -> str:
-    """SQL for a CHECK constraint that every element of a VARCHAR[] column is a valid FactorType."""
+    """SQL for a CHECK constraint that every element of a VARCHAR[] column is a valid FactorType.
+
+    Kept for the bc4d4a7d2b45 migration; current tables use ``risk_factor_token_array_check_sql``.
+    """
     allowed = ", ".join(f"'{f.value}'" for f in FactorType)
+    return f"{column} <@ ARRAY[{allowed}]::varchar[]"
+
+
+def risk_factor_tokens() -> tuple[str, ...]:
+    """Every valid "factor:value" token a KB rule may list as a relevant risk factor.
+
+    "unknown" is excluded: a rule cannot be made riskier by a factor the user did not give.
+    Each token earns +5 in Table 5.2 when the patient has exactly that value.
+    """
+    return tuple(
+        f"{factor_type.value}:{value}"
+        for factor_type, values in FACTOR_VALUES.items()
+        for value in values
+        if value != "unknown"
+    )
+
+
+def risk_factor_token_array_check_sql(column: str) -> str:
+    """SQL for a CHECK constraint that every element of a VARCHAR[] column is a valid "factor:value" token."""
+    allowed = ", ".join(f"'{token}'" for token in risk_factor_tokens())
     return f"{column} <@ ARRAY[{allowed}]::varchar[]"
 
 

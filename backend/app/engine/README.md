@@ -27,6 +27,15 @@ payload = result.to_dict()   # JSON-ready
   which the API should return as HTTP 422.
 * The same list, factors and KB version always give identical output (QA-REL-01).
 
+## Database rule format
+
+* `rule_id` in every warning is the row's `rule_code`.
+* `relevant_risk_factors` on `drug_interactions`, `contraindications` and `cascade_rules` holds
+  `factor:value` tokens such as `age_range:65_plus`. The database rejects any other value.
+  A contraindication must not list its own condition factor there.
+* Cascade rules link to medications through `cascade_rule_triggers` / `cascade_rule_downstream`.
+  Class-based rules are expanded into medications by `scripts.import_kb_rules`.
+
 ## What comes back (for Mustafa: scoring and explanations)
 
 `result.warnings` is a list of `SafetyWarning`:
@@ -34,13 +43,13 @@ payload = result.to_dict()   # JSON-ready
 | Field | Meaning |
 |---|---|
 | `category` | `contraindication`, `DDI`, `cascade` or `duplicate` (SRS A.2) |
-| `rule_id` | e.g. `INT-0001`, `CI-0001`, `CAS-0001`, `DUP-EXACT`, `DUP-CLASS:NSAID` (QA-EXP-04) |
+| `rule_id` | e.g. `INT-0001`, `CI-0001`, `CAS-0001`, `DUP-EXACT`, `DUP-INGREDIENT:Paracetamol`, `DUP-CLASS:NSAID` (QA-EXP-04) |
 | `medication_ids`, `medication_names` | The medicines involved |
 | `severity` | `Minor`/`Moderate`/`Major`/`Contraindicated` for DDI and contraindication; `None` for duplicate and cascade |
 | `description` | Plain-language reason from the KB, for your explanation text |
 | `relevant_factors` | Factors the rule lists as relevant, e.g. `["age_range:65_plus"]` |
 | `matched_factors` | The subset this patient actually has: **+5 each, max +15** in Table 5.2 |
-| `details` | Duplicates: `kind` = `exact` (30 pts) or `therapeutic` (15 pts), plus `entered_as` or `drug_class`. Cascades: `trigger_names`, `symptom_pattern`, `downstream_names`. Contraindications: `condition`. |
+| `details` | Duplicates: `kind` = `exact` (30 pts, also used for a shared active ingredient) or `therapeutic` (15 pts), plus `entered_as`, `ingredient` or `drug_class`. Cascades: `trigger_names`, `symptom_pattern`, `downstream_names`. Contraindications: `condition`. DDI and contraindications: `via` when the rule matched through an ingredient of a combination product (e.g. `["Ibuprofen", "Warfarin"]`), so the explanation can say "contains ibuprofen". |
 | `kb_version` | KB version that produced the warning |
 
 Also returned:
@@ -53,6 +62,10 @@ Also returned:
 
 Warnings come grouped in the FR-11 tie-break order (contraindication, DDI,
 cascade, duplicate). Re-sort by score after scoring.
+
+Combination products are checked through their active ingredients
+(`medication_info.active_ingredients`). Topical, eye and oral-gel products
+(names ending in `(topical)`, `(eye)`, `(oral gel)`) are excluded from this.
 
 Cascade warnings are always *possible* cascades: the engine cannot know
 which medicine came first, so explanations must not word them as a diagnosis.

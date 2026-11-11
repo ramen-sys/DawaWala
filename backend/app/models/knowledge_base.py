@@ -21,7 +21,7 @@ from app.models.enums import (
     Severity,
     enum_column,
     factor_pair_check_sql,
-    factor_type_array_check_sql,
+    risk_factor_token_array_check_sql,
 )
 
 
@@ -93,8 +93,10 @@ class DrugInteraction(Base):
     __table_args__ = (
         sa.UniqueConstraint("drug_a_id", "drug_b_id", name="uq_drug_interactions_pair"),
         sa.CheckConstraint("drug_a_id < drug_b_id", name="ordered_pair"),
-        # Every entry must be a FactorType value, so a typo cannot disable the patient-factor modifier (Table 5.2).
-        sa.CheckConstraint(factor_type_array_check_sql("relevant_risk_factors"), name="relevant_risk_factors_valid"),
+        # Every entry must be a valid "factor:value" token, so a typo cannot disable the patient-factor modifier (Table 5.2).
+        sa.CheckConstraint(
+            risk_factor_token_array_check_sql("relevant_risk_factors"), name="relevant_risk_factors_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -103,8 +105,9 @@ class DrugInteraction(Base):
     drug_b_id: Mapped[int] = mapped_column(sa.ForeignKey("medications.id", ondelete="CASCADE"), index=True)
     description: Mapped[str] = mapped_column(sa.Text)
     severity: Mapped[Severity] = mapped_column(enum_column(Severity, "severity"))
-    # Factor types (e.g. ["age_range", "kidney_function"]) that make this interaction riskier.
-    relevant_risk_factors: Mapped[list[FactorType]] = mapped_column(
+    # Patient factors that make this interaction riskier, as "factor:value" tokens,
+    # e.g. ["age_range:65_plus", "kidney_function:impaired"]. Each one the patient has adds +5 (Table 5.2).
+    relevant_risk_factors: Mapped[list[str]] = mapped_column(
         ARRAY(sa.String(50)), default=list, server_default="{}"
     )
     source: Mapped[str] = mapped_column(sa.String(255))
@@ -126,6 +129,9 @@ class Contraindication(Base):
             "medication_id", "factor_type", "factor_value", name="uq_contraindications_med_factor"
         ),
         sa.CheckConstraint(factor_pair_check_sql(), name="factor_value_valid"),
+        sa.CheckConstraint(
+            risk_factor_token_array_check_sql("relevant_risk_factors"), name="relevant_risk_factors_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -135,6 +141,11 @@ class Contraindication(Base):
     factor_value: Mapped[str] = mapped_column(sa.String(50))
     description: Mapped[str] = mapped_column(sa.Text)
     severity: Mapped[Severity] = mapped_column(enum_column(Severity, "severity"))
+    # Extra "factor:value" tokens that make this contraindication riskier, e.g. ["age_range:65_plus"]
+    # for metformin + impaired kidneys. Never the condition itself (that is factor_type/factor_value).
+    relevant_risk_factors: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.String(50)), default=list, server_default="{}"
+    )
     source: Mapped[str] = mapped_column(sa.String(255))
 
     medication: Mapped[Medication] = relationship()
@@ -163,11 +174,20 @@ class CascadeRule(Base):
     treated with a downstream medication (FR-12)."""
 
     __tablename__ = "cascade_rules"
+    __table_args__ = (
+        sa.CheckConstraint(
+            risk_factor_token_array_check_sql("relevant_risk_factors"), name="relevant_risk_factors_valid"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     rule_code: Mapped[str] = mapped_column(sa.String(50), unique=True)
     symptom_pattern: Mapped[str] = mapped_column(sa.String(255))
     description: Mapped[str] = mapped_column(sa.Text)
+    # "factor:value" tokens that make this cascade riskier, e.g. ["age_range:65_plus"] (+5 each, Table 5.2).
+    relevant_risk_factors: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.String(50)), default=list, server_default="{}"
+    )
     source: Mapped[str] = mapped_column(sa.String(255))
 
     triggering_medications: Mapped[list[Medication]] = relationship(

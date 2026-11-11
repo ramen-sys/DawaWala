@@ -34,13 +34,18 @@ class Settings(BaseSettings):
     MATCH_HIGH: int = 90
     MATCH_LOW: int = 70
 
-    KB_VERSION: str = "1.0"
-    KB_UPDATED_ON: str = "2026-10-22"
+    # Must match knowledge_base/data/kb_meta.json (scripts.import_kb_rules checks this).
+    KB_VERSION: str = "0.3.0"
+    KB_UPDATED_ON: str = "2026-11-04"
     # FR-9: drug classes whose members count as a possible therapeutic duplication.
+    # This is the single source of truth; scripts.import_kb_rules refuses to import if
+    # knowledge_base/data/drug_classes.csv disagrees with it.
     DUPLICATION_RELEVANT_CLASSES: str = (
         "Analgesic / antipyretic,NSAID,Proton-pump inhibitor,H2-receptor antagonist,Antihistamine,"
         "Macrolide antibiotic,Penicillin antibiotic,Fluoroquinolone antibiotic,Cephalosporin antibiotic,"
-        "Leukotriene receptor antagonist,Benzodiazepine,Antidiarrhoeal,Mucolytic"
+        "Leukotriene receptor antagonist,Benzodiazepine,Antidiarrhoeal,Mucolytic,"
+        "Anticoagulant,Calcium channel blocker,ACE inhibitor,Loop diuretic,Statin,"
+        "Cholinesterase inhibitor,Antimuscarinic"
     )
 
     LOG_DIR: Path = BACKEND_DIR / "logs"

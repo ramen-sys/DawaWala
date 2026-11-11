@@ -11,9 +11,9 @@ from collections import defaultdict
 from datetime import date
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.models.enums import Severity
+from app.models.enums import FACTOR_VALUES, Severity
 from app.models.knowledge_base import CascadeRule as CascadeRuleRow
 from app.models.knowledge_base import Contraindication as ContraindicationRow
 from app.models.knowledge_base import DrugInteraction as DrugInteractionRow
@@ -29,17 +29,18 @@ from .models import (
     InteractionRule,
     KnowledgeBase,
     Medication,
+    product_ingredients,
 )
 
-# SRS Appendix A.2. "unknown" is always allowed and is not listed here.
+# SRS Appendix A.2, taken from the same table the database CHECK constraints use.
+# "unknown" is always allowed and is not listed here. FactorType.OTHER has no fixed
+# values, so it is not part of the engine vocabulary.
 RISK_FACTORS: dict[str, tuple[str, ...]] = {
-    "age_range": ("under_18", "18_64", "65_plus"),
-    "kidney_function": ("normal", "impaired"),
-    "liver_function": ("normal", "impaired"),
+    factor_type.value: tuple(v for v in values if v != "unknown")
+    for factor_type, values in FACTOR_VALUES.items()
 }
 
 _SEVERITY_FROM_DB = {level.value: label for level, label in zip(Severity, SEVERITIES, strict=True)}
-_DB_SOURCE = "database"
 
 
 def load_kb_from_db(
@@ -51,6 +52,7 @@ def load_kb_from_db(
 ) -> KnowledgeBase:
     """Load every rule currently stored in PostgreSQL.
 
+    Warning rule ids are the rows' ``rule_code`` (QA-EXP-04).
     Raises KBValidationError listing every problem found.
     """
     from app.core.config import settings
@@ -70,7 +72,10 @@ def load_kb_from_db(
 
     medications: dict[int, Medication] = {}
     classes: dict[str, DrugClass] = {}
-    for row in db.scalars(select(MedicationRow).order_by(MedicationRow.id)):
+    med_rows = db.scalars(
+        select(MedicationRow).options(selectinload(MedicationRow.aliases)).order_by(MedicationRow.id)
+    )
+    for row in med_rows:
         class_name = (row.drug_class or "").strip()
         med_classes = (class_name,) if class_name else ()
         if class_name and class_name not in classes:
@@ -79,7 +84,8 @@ def load_kb_from_db(
             row.id,
             row.standard_name,
             med_classes,
-            tuple(alias for alias in (row.aliases or []) if alias),
+            tuple(alias for alias in row.alias_names if alias),
+            product_ingredients(row.standard_name, (row.medication_info or {}).get("active_ingredients")),
         )
 
     def parse_factors(tokens: list[str] | None, where: str) -> tuple[Factor, ...]:
@@ -106,8 +112,8 @@ def load_kb_from_db(
         return label
 
     interactions: dict[tuple[int, int], list[InteractionRule]] = defaultdict(list)
-    for row in db.scalars(select(DrugInteractionRow).order_by(DrugInteractionRow.id)):
-        where = f"drug_interactions id {row.id}"
+    for row in db.scalars(select(DrugInteractionRow).order_by(DrugInteractionRow.rule_code)):
+        where = f"drug_interactions {row.rule_code}"
         label = severity_label(row.severity, where)
         factors = parse_factors(list(row.relevant_risk_factors or []), where)
         if row.drug_a_id not in medications or row.drug_b_id not in medications:
@@ -120,20 +126,24 @@ def load_kb_from_db(
             continue
         low, high = sorted((row.drug_a_id, row.drug_b_id))
         interactions[(low, high)].append(
-            InteractionRule(f"INT-{row.id}", low, high, label, row.description, factors, _DB_SOURCE)
+            InteractionRule(row.rule_code, low, high, label, row.description, factors, row.source)
         )
 
     contraindications: dict[int, list[ContraindicationRule]] = defaultdict(list)
-    for row in db.scalars(select(ContraindicationRow).order_by(ContraindicationRow.id)):
-        where = f"contraindications id {row.id}"
+    for row in db.scalars(select(ContraindicationRow).order_by(ContraindicationRow.rule_code)):
+        where = f"contraindications {row.rule_code}"
         label = severity_label(row.severity, where)
-        factor, separator, value = row.patient_condition.partition(":")
-        factor, value = factor.strip(), value.strip().lower()
-        if not separator or factor not in RISK_FACTORS:
-            errors.append(f"{where}: patient_condition '{row.patient_condition}' is not a known factor:value")
+        factor = str(getattr(row.factor_type, "value", row.factor_type) or "").strip()
+        value = (row.factor_value or "").strip().lower()
+        factors = parse_factors(list(row.relevant_risk_factors or []), where)
+        if factor not in RISK_FACTORS:
+            errors.append(f"{where}: '{factor}' is not a known risk factor")
             continue
         if value not in RISK_FACTORS[factor]:
             errors.append(f"{where}: '{value}' is not an allowed value of {factor}")
+            continue
+        if any(name == factor for name, _ in factors):
+            errors.append(f"{where}: relevant_risk_factors must not repeat the condition factor '{factor}'")
             continue
         if row.medication_id not in medications:
             errors.append(f"{where}: medication id is not in medications")
@@ -142,25 +152,32 @@ def load_kb_from_db(
             continue
         contraindications[row.medication_id].append(
             ContraindicationRule(
-                f"CI-{row.id}", row.medication_id, factor, value, label, row.description, (), _DB_SOURCE
+                row.rule_code, row.medication_id, factor, value, label, row.description, factors, row.source
             )
         )
 
     cascades: list[CascadeRule] = []
-    for row in db.scalars(select(CascadeRuleRow).order_by(CascadeRuleRow.id)):
-        where = f"cascade_rules id {row.id}"
-        triggers = frozenset(row.triggering_medications or [])
-        downstream = frozenset(row.downstream_medications or [])
-        missing = (triggers | downstream) - medications.keys()
+    cascade_rows = db.scalars(
+        select(CascadeRuleRow)
+        .options(
+            selectinload(CascadeRuleRow.triggering_medications),
+            selectinload(CascadeRuleRow.downstream_medications),
+        )
+        .order_by(CascadeRuleRow.rule_code)
+    )
+    for row in cascade_rows:
+        where = f"cascade_rules {row.rule_code}"
+        # The join tables have foreign keys, so every linked medication exists. Class-based
+        # patterns in the curated CSVs are expanded into medications by scripts.import_kb_rules.
+        triggers = frozenset(med.id for med in row.triggering_medications)
+        downstream = frozenset(med.id for med in row.downstream_medications)
+        factors = parse_factors(list(row.relevant_risk_factors or []), where)
         ok = True
         if not triggers:
             errors.append(f"{where}: needs at least one triggering medication")
             ok = False
         if not downstream:
             errors.append(f"{where}: needs at least one downstream medication")
-            ok = False
-        if missing:
-            errors.append(f"{where}: unknown medication id(s) {', '.join(map(str, sorted(missing)))}")
             ok = False
         if not (row.symptom_pattern or "").strip():
             errors.append(f"{where}: symptom_pattern is required")
@@ -169,15 +186,15 @@ def load_kb_from_db(
             continue
         cascades.append(
             CascadeRule(
-                f"CAS-{row.id}",
+                row.rule_code,
                 triggers,
                 frozenset(),
                 row.symptom_pattern.strip(),
                 downstream,
                 frozenset(),
                 row.description,
-                (),
-                _DB_SOURCE,
+                factors,
+                row.source,
             )
         )
 
