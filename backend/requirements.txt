@@ -17,6 +17,10 @@ kagglehub==1.0.2
 Mako==1.4.3
 MarkupSafe==3.0.4
 numpy==2.4.6
+opencv-python-headless==5.0.0.93
+pillow==13.0.0
+RapidFuzz==3.14.6
+pytesseract==0.3.13
 opentelemetry-api==1.45.1
 pandas==3.0.6
 psycopg2-binary==2.9.13
