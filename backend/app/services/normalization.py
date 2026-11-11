@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
+from rapidfuzz.distance import Levenshtein
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,8 @@ from app.models import Medication, MedicationAlias
 from app.models.enums import ConfidenceLabel
 
 MIN_CANDIDATE_SCORE = 70
+MAX_FUZZY_EDIT_RATIO = 0.15
+MIN_FUZZY_TERM_LENGTH = 5
 MAX_TERM_WORDS = 6
 _WORD = re.compile(r"[^\W_]+", re.UNICODE)
 _STRENGTH = re.compile(r"(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu|%)", re.IGNORECASE)
@@ -22,11 +25,19 @@ _NON_DRUG_TEXT = re.compile(
     r"|take|takes|taking|use|uses|using|apply|applies|applied|"
     r"tablet|tablets|tab|tabs|capsule|capsules|cap|caps|syrup|suspension|"
     r"injection|injectable|cream|ointment|drop|drops|oral|"
-    r"once|twice|thrice|daily|weekly|every|each|morning|noon|evening|night|bedtime|"
+    r"once|twice|thrice|daily|weekly|nightly|every|each|morning|noon|evening|night|bedtime|"
     r"before|after|with|without|food|meal|meals|"
     r"day|days|week|weeks|month|months|hour|hours|"
     r"as\s+needed|if\s+needed|prn|od|bd|tds|qid|hs|"
     r"for|then|and|or|one|two|three|four|five|six"
+    r")\b",
+    re.IGNORECASE,
+)
+_MEDICATION_CONTEXT = re.compile(
+    r"\b(?:"
+    r"\d+(?:\.\d+)?\s*(?:mg|mcg|g|kg|ml|l|iu|units?|%)"
+    r"|tablets?|tabs?|capsules?|caps?|syrup|suspension|injection|injectable|"
+    r"cream|ointment|drops?|od|bd|tds|qid|hs|prn"
     r")\b",
     re.IGNORECASE,
 )
@@ -84,9 +95,17 @@ def _rank_candidates(term: str, vocabulary: list[VocabularyEntry], limit: int = 
 
     best: dict[int, dict] = {}
     for medication_id, standard_name, match_name in vocabulary:
-        score = round(fuzz.ratio(normalized_term, " ".join(_normalized_words(match_name))))
+        normalized_name = " ".join(_normalized_words(match_name))
+        score = round(fuzz.ratio(normalized_term, normalized_name))
         if score < MIN_CANDIDATE_SCORE:
             continue
+        if normalized_term != normalized_name:
+            longer_length = max(len(normalized_term), len(normalized_name))
+            if min(len(normalized_term), len(normalized_name)) < MIN_FUZZY_TERM_LENGTH:
+                continue
+            edit_distance = Levenshtein.distance(normalized_term, normalized_name)
+            if edit_distance / longer_length > MAX_FUZZY_EDIT_RATIO:
+                continue
         current = best.get(medication_id)
         if current is None or score > current["match_score"]:
             best[medication_id] = {
@@ -103,8 +122,9 @@ def _rank_candidates(term: str, vocabulary: list[VocabularyEntry], limit: int = 
 def extract_medication_terms(raw_text: str, vocabulary: list[VocabularyEntry]) -> list[dict]:
     """Extract recognizable medicine-name spans from OCR text, ignoring surrounding directions.
 
-    Only spans matching a standard name or alias at FR-6's 70-point minimum become
-    medication items. The original full OCR transcription remains separate for review.
+    Matched spans become suggested medication items. Unmatched name-like spans on lines
+    with prescription evidence are retained as unrecognised items. The original full OCR
+    transcription remains separate for review.
     """
     matchable_text = _NON_DRUG_TEXT.sub(lambda match: " " * len(match.group()), raw_text)
     words = _WORD.findall(matchable_text)
@@ -139,6 +159,38 @@ def extract_medication_terms(raw_text: str, vocabulary: list[VocabularyEntry]) -
         })
         start += size
 
+    residual = list(matchable_text)
+    for term in found:
+        residual[term["start"] : term["end"]] = " " * (term["end"] - term["start"])
+    residual_text = "".join(residual)
+    residual_words = list(_WORD.finditer(residual_text))
+    groups: list[list[re.Match]] = []
+    for word in residual_words:
+        if groups and not residual_text[groups[-1][-1].end() : word.start()].strip():
+            groups[-1].append(word)
+        else:
+            groups.append([word])
+    boundaries = list(re.finditer(r";|\n|\.\s+", raw_text))
+    for group in groups:
+        start, end = group[0].start(), group[-1].end()
+        segment_start = max(
+            (boundary.end() for boundary in boundaries if boundary.end() <= start),
+            default=0,
+        )
+        segment_end = min(
+            (boundary.start() for boundary in boundaries if boundary.start() >= end),
+            default=len(raw_text),
+        )
+        if not _MEDICATION_CONTEXT.search(raw_text[segment_start:segment_end]):
+            continue
+        found.append({
+            "text": " ".join(word.group() for word in group),
+            "start": start,
+            "end": end,
+            "candidates": [],
+        })
+
+    found.sort(key=lambda term: term["start"])
     for index, term in enumerate(found):
         next_start = found[index + 1]["start"] if index + 1 < len(found) else len(raw_text)
         details = raw_text[term["end"] : next_start].strip(" \t,;:-")

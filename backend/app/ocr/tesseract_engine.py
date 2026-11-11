@@ -1,103 +1,146 @@
-from app.ocr.engine import OCRLine,OCR_engine
-import shutil
-from PIL import Image
-import pytesseract
 import os
+import re
+
 import cv2
 import numpy as np
-import re
-from rapidfuzz import fuzz
+import pytesseract
+from PIL import Image
+
+from app.ocr.engine import OCRLine, OCR_engine
 
 custom_path = os.getenv("TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
 
 if os.path.exists(custom_path):
     pytesseract.pytesseract.tesseract_cmd = custom_path
-elif shutil.which("tesseract"):
-    # Found in system PATH (works automatically on Linux / Docker)
-    pass
 
 class Tesseract_engine(OCR_engine):
-    def preprocess_image(self,image_bytes:bytes)->Image.Image:
+    def preprocess_image(self, image_bytes: bytes) -> Image.Image:
+        image_array = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
 
-        '''Contrast enhnancement step that makes stylized packing sharper'''
-        #convertung bytes to open cv image
-        np_arr=np.frombuffer(image_bytes,np.uint8)
-        img=cv2.imdecode(np_arr,cv2.IMREAD_COLOR)
-        #Convert to grayscale
-        gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-
-
-        # Contrast Stretching / CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        longest_edge = max(enhanced.shape[:2])
+        if longest_edge < 1200:
+            scale = 1200 / longest_edge
+            enhanced = cv2.resize(
+                enhanced,
+                None,
+                fx=scale,
+                fy=scale,
+                interpolation=cv2.INTER_CUBIC,
+            )
 
         return Image.fromarray(enhanced)
 
-    
+    @staticmethod
+    def _recognition_images(image: Image.Image) -> list[Image.Image]:
+        gray = np.asarray(image)
+        adaptive = cv2.adaptiveThreshold(
+            gray,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            11,
+        )
+        return [image, Image.fromarray(adaptive)]
 
-   
-    
-    def _merge_data(self, data1: dict, data2: dict, similarity: int = 85) -> dict:
-        KEYS = ["text", "conf", "block_num", "line_num", "left", "top", "width", "height"]
-        
-        merged = {key: list(data1[key]) for key in KEYS}  # copy, so data1 isn't changed
-
-        for i in range(len(data2["text"])):
-            text = data2["text"][i].strip()
-            if not text:
+    @staticmethod
+    def _word_records(data: dict) -> list[dict]:
+        records = []
+        for index, raw_text in enumerate(data["text"]):
+            text = raw_text.strip()
+            confidence = float(data["conf"][index])
+            if not text or confidence < 0:
                 continue
+            records.append({
+                "text": text,
+                "conf": confidence,
+                "left": int(data["left"][index]),
+                "top": int(data["top"][index]),
+                "width": int(data["width"][index]),
+                "height": int(data["height"][index]),
+            })
+        return records
 
-            is_duplicate = any(
-                abs(data2["left"][i] - merged["left"][j]) < 20
-                and abs(data2["top"][i] - merged["top"][j]) < 20
-                and fuzz.ratio(text.lower(), merged["text"][j].strip().lower()) >= similarity
-                for j in range(len(merged["text"]))
-            )
+    @staticmethod
+    def _overlap_ratio(first: dict, second: dict) -> float:
+        left = max(first["left"], second["left"])
+        top = max(first["top"], second["top"])
+        right = min(first["left"] + first["width"], second["left"] + second["width"])
+        bottom = min(first["top"] + first["height"], second["top"] + second["height"])
+        intersection = max(0, right - left) * max(0, bottom - top)
+        smaller_area = min(
+            first["width"] * first["height"],
+            second["width"] * second["height"],
+        )
+        return intersection / smaller_area if smaller_area else 0
 
-            if not is_duplicate:
-                for key in KEYS:
-                    merged[key].append(data2[key][i])
-
+    @classmethod
+    def _merge_data(cls, *data_sources: dict) -> list[dict]:
+        """Merge OCR passes by word-box overlap, keeping the higher-confidence reading."""
+        merged: list[dict] = []
+        for source in data_sources:
+            for candidate in cls._word_records(source):
+                duplicate_index = next(
+                    (
+                        index
+                        for index, existing in enumerate(merged)
+                        if cls._overlap_ratio(candidate, existing) >= 0.5
+                    ),
+                    None,
+                )
+                if duplicate_index is None:
+                    merged.append(candidate)
+                elif candidate["conf"] > merged[duplicate_index]["conf"]:
+                    merged[duplicate_index] = candidate
         return merged
+
+    @staticmethod
+    def _group_lines(words: list[dict]) -> list[list[dict]]:
+        lines: list[list[dict]] = []
+        for word in sorted(words, key=lambda value: (value["top"] + value["height"] / 2, value["left"])):
+            center = word["top"] + word["height"] / 2
+            target = next(
+                (
+                    line
+                    for line in lines
+                    if abs(
+                        center
+                        - sum(item["top"] + item["height"] / 2 for item in line) / len(line)
+                    )
+                    <= max(4, min(word["height"], max(item["height"] for item in line)) * 0.55)
+                ),
+                None,
+            )
+            if target is None:
+                lines.append([word])
+            else:
+                target.append(word)
+        return [sorted(line, key=lambda word: word["left"]) for line in lines]
+
     def extract_lines(self, image_bytes):
-        #converting raw bytes to Pillow image and converting to grayscale
-
         image = self.preprocess_image(image_bytes)
+        gray_image, adaptive_image = self._recognition_images(image)
+        gray_data = pytesseract.image_to_data(
+            gray_image,
+            config="--oem 3 --psm 3",
+            output_type=pytesseract.Output.DICT,
+        )
+        adaptive_data = pytesseract.image_to_data(
+            adaptive_image,
+            config="--oem 3 --psm 6",
+            output_type=pytesseract.Output.DICT,
+        )
 
-        #converting image into ocr text
-        custom_config = r'--psm 3'
-        custom_config2 = r'--psm 6'
-        
-        data1=pytesseract.image_to_data(image=image,config=custom_config,output_type=pytesseract.Output.DICT)
-
-        data2=pytesseract.image_to_data(image=image,config=custom_config2,output_type=pytesseract.Output.DICT)
-
-        data=self._merge_data(data1,data2)
-
-        lines_dict={}
-        n_boxes=len(data["text"])
-        for i in range(n_boxes):
-            text=data["text"][i].strip()
-            conf=float(data["conf"][i])
-
-            if conf==-1 or not text:
-                continue
-
-            line_key=(data["block_num"][i],data["line_num"][i])
-            if line_key not in lines_dict:
-                lines_dict[line_key]=[]
-
-            lines_dict[line_key].append((text,conf))
-
-        ocr_lines = []
-            
-
-        for words_and_confs in lines_dict.values():
-            avg_conf=sum(w[1] for w in words_and_confs)/len(words_and_confs)
-            line_text = " ".join(w[0] for w in words_and_confs).strip()
-            clean_text = re.sub(r'^[^\w]+|[^\w]+$', '', line_text)
+        words = self._merge_data(gray_data, adaptive_data)
+        lines = []
+        for line_words in self._group_lines(words):
+            line_text = " ".join(word["text"] for word in line_words)
+            clean_text = re.sub(r"^[^\w]+|[^\w]+$", "", line_text)
             if not clean_text:
                 continue
-            ocr_lines.append(OCRLine(text=clean_text, confidence=round(avg_conf, 2)))
-
-        return ocr_lines
+            confidence = sum(word["conf"] for word in line_words) / len(line_words)
+            lines.append(OCRLine(text=clean_text, confidence=round(confidence, 2)))
+        return lines

@@ -70,9 +70,30 @@ def _validate_image(image_bytes: bytes) -> str:
 
 def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRListResult:
     image_format = _validate_image(image_bytes)
+    med_list = MedicationList(
+        user_id=user.id,
+        source=ListSource.OCR,
+        confirmation_status=ConfirmationStatus.DRAFT,
+    )
+    db.add(med_list)
+    db.flush()
+
+    image_record = PrescriptionImage(
+        list_id=med_list.id,
+        file_reference=random_file_reference(image_format.lower()),
+        ocr_status=OcrStatus.PENDING,
+    )
+    db.add(image_record)
+    db.commit()
+
+    image_record.ocr_status = OcrStatus.PROCESSING
+    db.commit()
+
     try:
         lines = Tesseract_engine().extract_lines(image_bytes)
     except TesseractNotFoundError as exc:
+        image_record.ocr_status = OcrStatus.FAILED
+        db.commit()
         logger.exception("Tesseract executable is unavailable")
         raise AppError(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -80,6 +101,8 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
             "OCR is unavailable. Install Tesseract or configure TESSERACT_CMD.",
         ) from exc
     except TesseractError as exc:
+        image_record.ocr_status = OcrStatus.FAILED
+        db.commit()
         logger.exception("Tesseract failed to process an uploaded image")
         raise AppError(
             status.HTTP_502_BAD_GATEWAY,
@@ -87,15 +110,29 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
             "OCR could not read this image. Try a clearer image.",
         ) from exc
     except cv2.error as exc:
+        image_record.ocr_status = OcrStatus.FAILED
+        db.commit()
         raise AppError(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_image", "The uploaded image could not be decoded.") from exc
 
     if not lines:
+        image_record.ocr_status = OcrStatus.FAILED
+        db.commit()
         raise AppError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "no_text_detected",
             "No readable text was found. Try a clearer image.",
         )
     raw_text = "\n".join(line.text for line in lines)
+    image_record.ocr_status = OcrStatus.COMPLETED
+    extraction = OcrExtractionResult(
+        image_id=image_record.id,
+        raw_text=raw_text,
+        candidates=[],
+        confidence=round(sum(line.confidence for line in lines) / len(lines)),
+    )
+    db.add(extraction)
+    db.commit()
+
     vocabulary = medication_vocabulary(db)
     extracted_terms: list[dict] = []
     for line in lines:
@@ -115,21 +152,7 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
             "Try a closer crop around the medicine names.",
         )
 
-    med_list = MedicationList(
-        user_id=user.id,
-        source=ListSource.OCR,
-        confirmation_status=ConfirmationStatus.DRAFT,
-    )
-    db.add(med_list)
-    db.flush()
-
-    image_record = PrescriptionImage(
-        list_id=med_list.id,
-        file_reference=random_file_reference(image_format.lower()),
-        ocr_status=OcrStatus.COMPLETED,
-    )
-    db.add(image_record)
-    db.flush()
+    image_record.ocr_status = OcrStatus.COMPLETED
 
     extracted_lines = [
         OCRLineOut(text=line.text, confidence=line.confidence)
@@ -167,14 +190,7 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
             }
         )
 
-    db.add(
-        OcrExtractionResult(
-            image_id=image_record.id,
-            raw_text=raw_text,
-            candidates=extraction_candidates,
-            confidence=round(sum(line.confidence for line in lines) / len(lines)),
-        )
-    )
+    extraction.candidates = extraction_candidates
     db.commit()
     loaded_list = _load(db, med_list.id)
     if loaded_list is None:

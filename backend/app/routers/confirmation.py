@@ -72,6 +72,8 @@ def get_image_candidates(
         item = db.get(MedicationListItem, result["item_id"])
         if item is None or item.list_id != lst.id:
             continue
+        was_edited = result.get("text") != item.raw_text
+        prescription_details = "" if was_edited else result.get("prescription_details", "")
         medicines.append(
             ImageMedicineCandidates(
                 item_id=item.id,
@@ -80,10 +82,10 @@ def get_image_candidates(
                 match_score=item.match_score,
                 confidence_label=confidence_label(item.match_score),
                 ocr_confidence=result.get("confidence"),
-                source_line=result.get("source_line", item.raw_text),
-                prescription_details=result.get("prescription_details", ""),
-                strengths=extract_strengths(result.get("prescription_details", "")),
-                candidates=[MedicationCandidate.model_validate(c) for c in result.get("candidates", [])],
+                source_line=item.raw_text if was_edited else result.get("source_line", item.raw_text),
+                prescription_details=prescription_details,
+                strengths=extract_strengths(prescription_details),
+                candidates=[MedicationCandidate.model_validate(c) for c in resolve_term(db, item.raw_text)],
             )
         )
 
