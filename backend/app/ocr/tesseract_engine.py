@@ -73,7 +73,6 @@ class Tesseract_engine(OCR_engine):
         data2=pytesseract.image_to_data(image=image,config=custom_config2,output_type=pytesseract.Output.DICT)
 
         data=self._merge_data(data1,data2)
-        MIN_CONFIDENCE=35.0
 
         lines_dict={}
         n_boxes=len(data["text"])
@@ -95,11 +94,9 @@ class Tesseract_engine(OCR_engine):
 
         for words_and_confs in lines_dict.values():
             avg_conf=sum(w[1] for w in words_and_confs)/len(words_and_confs)
-            if avg_conf<MIN_CONFIDENCE:
-                continue
             line_text = " ".join(w[0] for w in words_and_confs).strip()
             clean_text = re.sub(r'^[^\w]+|[^\w]+$', '', line_text)
-            if not clean_text or (len(clean_text) <= 2 and not any(char.isdigit() for char in clean_text)):
+            if not clean_text:
                 continue
             ocr_lines.append(OCRLine(text=clean_text, confidence=round(avg_conf, 2)))
 

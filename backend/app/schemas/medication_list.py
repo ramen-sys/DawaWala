@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import settings
-from app.models.enums import ConfidenceLabel, ConfirmationFlag, ConfirmationStatus, ListSource
+from app.models.enums import ConfidenceLabel, ConfirmationFlag, ConfirmationStatus, ListSource, OcrStatus
 
 
 def clean_medication_name(value: str) -> str:
@@ -73,6 +73,11 @@ class MedicationCandidate(BaseModel):
 
 
 class OCRLineOut(BaseModel):
+    text: str
+    confidence: float
+
+
+class OCRMedicineOut(BaseModel):
     item_id: int
     text: str
     confidence: float
@@ -81,8 +86,31 @@ class OCRLineOut(BaseModel):
 
 class OCRMedicationListOut(BaseModel):
     image_id: int
+    ocr_status: OcrStatus
+    raw_text: str
     medication_list: MedicationListOut
     extracted_lines: list[OCRLineOut]
+    extracted_medicines: list[OCRMedicineOut]
+
+
+class ImageMedicineCandidates(BaseModel):
+    item_id: int
+    text: str
+    confirmation_flag: ConfirmationFlag
+    match_score: int | None
+    confidence_label: ConfidenceLabel
+    ocr_confidence: float | None
+    source_line: str
+    prescription_details: str
+    strengths: list[str]
+    candidates: list[MedicationCandidate]
+
+
+class ImageCandidatesOut(BaseModel):
+    image_id: int
+    ocr_status: OcrStatus
+    raw_text: str
+    medicines: list[ImageMedicineCandidates]
 
 
 class MedicationSearchResult(BaseModel):

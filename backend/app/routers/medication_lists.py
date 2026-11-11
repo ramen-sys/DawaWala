@@ -48,8 +48,11 @@ def create_list_from_image(
     result = ocr_service.create_list_from_image(db, user, image_bytes)
     return {
         "image_id": result.image_id,
+        "ocr_status": result.ocr_status,
+        "raw_text": result.raw_text,
         "medication_list": result.medication_list,
         "extracted_lines": result.extracted_lines,
+        "extracted_medicines": result.extracted_medicines,
     }
 
 

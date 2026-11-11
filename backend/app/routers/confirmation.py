@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db   # match your existing dependency names
-from app.models import MedicationList, MedicationListItem
+from app.models import MedicationList, MedicationListItem, OcrExtractionResult, PrescriptionImage
+from app.models.enums import OcrStatus
+from app.schemas.medication_list import ImageCandidatesOut, ImageMedicineCandidates, MedicationCandidate
 from app.services import confirmation as svc
-from app.services.normalization import resolve_term
+from app.services.normalization import confidence_label, extract_strengths, resolve_term
 
 router = APIRouter(prefix="/medication-lists", tags=["confirmation"])
 
@@ -35,6 +38,61 @@ def get_candidates(list_id: int, item_id: int, db: Session = Depends(get_db), us
     lst = owned_list(db, list_id, user)
     item = owned_item(db, lst, item_id)
     return {"item_id": item.id, "raw_text": item.raw_text, "candidates": resolve_term(db, item.raw_text)}
+
+
+@router.get(
+    "/{list_id}/images/{image_id}/candidates",
+    response_model=ImageCandidatesOut,
+    summary="Get all medicine candidates extracted from one image",
+)
+def get_image_candidates(
+    list_id: int,
+    image_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    lst = owned_list(db, list_id, user)
+    image = db.scalar(
+        select(PrescriptionImage)
+        .where(PrescriptionImage.id == image_id, PrescriptionImage.list_id == lst.id)
+    )
+    if image is None:
+        raise HTTPException(404, detail={"code": "not_found", "message": "Image not found."})
+    if image.ocr_status != OcrStatus.COMPLETED:
+        raise HTTPException(409, detail={"code": "ocr_not_completed", "message": "Image OCR is not complete."})
+
+    extraction = db.scalar(
+        select(OcrExtractionResult).where(OcrExtractionResult.image_id == image.id)
+    )
+    if extraction is None:
+        raise HTTPException(404, detail={"code": "not_found", "message": "Image OCR results were not found."})
+
+    medicines = []
+    for result in extraction.candidates:
+        item = db.get(MedicationListItem, result["item_id"])
+        if item is None or item.list_id != lst.id:
+            continue
+        medicines.append(
+            ImageMedicineCandidates(
+                item_id=item.id,
+                text=item.raw_text,
+                confirmation_flag=item.confirmation_flag,
+                match_score=item.match_score,
+                confidence_label=confidence_label(item.match_score),
+                ocr_confidence=result.get("confidence"),
+                source_line=result.get("source_line", item.raw_text),
+                prescription_details=result.get("prescription_details", ""),
+                strengths=extract_strengths(result.get("prescription_details", "")),
+                candidates=[MedicationCandidate.model_validate(c) for c in result.get("candidates", [])],
+            )
+        )
+
+    return ImageCandidatesOut(
+        image_id=image.id,
+        ocr_status=image.ocr_status,
+        raw_text=extraction.raw_text,
+        medicines=medicines,
+    )
 
 
 @router.post("/{list_id}/items/{item_id}/accept")

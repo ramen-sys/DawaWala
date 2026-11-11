@@ -14,9 +14,9 @@ from app.models import MedicationList, MedicationListItem, OcrExtractionResult, 
 from app.models.enums import ConfirmationFlag, ConfirmationStatus, ListSource, OcrStatus
 from app.ocr.tesseract_engine import Tesseract_engine
 from app.models.medication_list import random_file_reference
-from app.schemas.medication_list import MedicationListOut, OCRLineOut
+from app.schemas.medication_list import MedicationListOut, OCRLineOut, OCRMedicineOut
 from app.services.medication_list_service import _load, to_detail
-from app.services.normalization import resolve_term
+from app.services.normalization import extract_medication_terms, medication_vocabulary
 
 logger = logging.getLogger(__name__)
 MAX_IMAGE_PIXELS = 20_000_000
@@ -26,8 +26,11 @@ SUPPORTED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
 @dataclass
 class OCRListResult:
     image_id: int
+    ocr_status: OcrStatus
+    raw_text: str
     medication_list: MedicationListOut
     extracted_lines: list[OCRLineOut]
+    extracted_medicines: list[OCRMedicineOut]
 
 
 def _validate_image(image_bytes: bytes) -> str:
@@ -92,11 +95,23 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
             "no_text_detected",
             "No readable text was found. Try a clearer image.",
         )
-    if len(lines) > settings.MAX_MEDS_PER_LIST:
+    raw_text = "\n".join(line.text for line in lines)
+    vocabulary = medication_vocabulary(db)
+    extracted_terms: list[dict] = []
+    for line in lines:
+        for term in extract_medication_terms(line.text, vocabulary):
+            extracted_terms.append({
+                **term,
+                "confidence": line.confidence,
+                "source_line": line.text,
+            })
+
+    if len(extracted_terms) > settings.MAX_MEDS_PER_LIST:
         raise AppError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "too_many_ocr_lines",
-            f"OCR found {len(lines)} text lines; a list can contain at most {settings.MAX_MEDS_PER_LIST} items. "
+            "too_many_ocr_medicines",
+            f"OCR found {len(extracted_terms)} medicine names; a list can contain at most "
+            f"{settings.MAX_MEDS_PER_LIST} items. "
             "Try a closer crop around the medicine names.",
         )
 
@@ -116,31 +131,37 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
     db.add(image_record)
     db.flush()
 
-    extracted_lines: list[OCRLineOut] = []
+    extracted_lines = [
+        OCRLineOut(text=line.text, confidence=line.confidence)
+        for line in lines
+    ]
+    extracted_medicines: list[OCRMedicineOut] = []
     extraction_candidates: list[dict] = []
-    for line in lines:
-        candidates = resolve_term(db, line.text)
+    for term in extracted_terms:
+        candidates = term["candidates"]
         item = MedicationListItem(
             list_id=med_list.id,
-            raw_text=line.text,
+            raw_text=term["text"],
             medication_id=candidates[0]["medication_id"] if candidates else None,
             match_score=candidates[0]["match_score"] if candidates else None,
             confirmation_flag=ConfirmationFlag.UNRESOLVED,
         )
         db.add(item)
         db.flush()
-        extracted_lines.append(
-            OCRLineOut(
+        extracted_medicines.append(
+            OCRMedicineOut(
                 item_id=item.id,
-                text=line.text,
-                confidence=line.confidence,
+                text=term["text"],
+                confidence=term["confidence"],
                 candidates=candidates,
             )
         )
         extraction_candidates.append(
             {
-                "text": line.text,
-                "confidence": line.confidence,
+                "text": term["text"],
+                "confidence": term["confidence"],
+                "source_line": term["source_line"],
+                "prescription_details": term["prescription_details"],
                 "item_id": item.id,
                 "candidates": candidates,
             }
@@ -149,7 +170,7 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
     db.add(
         OcrExtractionResult(
             image_id=image_record.id,
-            raw_text="\n".join(line.text for line in lines),
+            raw_text=raw_text,
             candidates=extraction_candidates,
             confidence=round(sum(line.confidence for line in lines) / len(lines)),
         )
@@ -161,6 +182,9 @@ def create_list_from_image(db: Session, user: User, image_bytes: bytes) -> OCRLi
 
     return OCRListResult(
         image_id=image_record.id,
+        ocr_status=image_record.ocr_status,
+        raw_text=raw_text,
         medication_list=to_detail(loaded_list),
         extracted_lines=extracted_lines,
+        extracted_medicines=extracted_medicines,
     )
