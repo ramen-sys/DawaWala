@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import CurrentUser, DbSession, client_ip
+from app.core.errors import AppError
+from app.models.enums import AuthEventType, UserRole
 from app.models import CascadeRule, Contraindication, DrugInteraction, Medication
 from app.schemas.medication_list import MedicationSearchResult
+from app.services.auth_event_service import record_event
+from app.services.knowledge_base_service import reload_knowledge_base
 from app.services.normalization import alias_matches, escape_like
 
 router = APIRouter(prefix="/medications", tags=["Knowledge base"])
@@ -20,6 +24,25 @@ def knowledge_base_info(_: CurrentUser, db: DbSession):
         "interactions": db.scalar(select(func.count()).select_from(DrugInteraction)),
         "contraindications": db.scalar(select(func.count()).select_from(Contraindication)),
         "cascade_rules": db.scalar(select(func.count()).select_from(CascadeRule)),
+    }
+
+
+@router.post(
+    "/knowledge-base/reload",
+    summary="Admin: reload the safety rules after scripts.import_kb_rules, without a restart",
+)
+def reload_kb(user: CurrentUser, db: DbSession, request: Request):
+    if user.role != UserRole.ADMIN:
+        record_event(db, AuthEventType.AUTHZ_DENIED, user.id, client_ip(request))
+        raise AppError(status.HTTP_403_FORBIDDEN, "forbidden", "Only an administrator can reload the knowledge base.")
+    kb = reload_knowledge_base(db)
+    return {
+        "version": kb.version,
+        "updated_on": kb.updated,
+        "medications": len(kb.medications),
+        "interactions": sum(len(rules) for rules in kb.interactions.values()),
+        "contraindications": sum(len(rules) for rules in kb.contraindications.values()),
+        "cascade_rules": len(kb.cascades),
     }
 
 

@@ -63,6 +63,11 @@ Also returned:
 Warnings come grouped in the FR-11 tie-break order (contraindication, DDI,
 cascade, duplicate). Re-sort by score after scoring.
 
+Interaction rules written for a whole drug class reach the engine already expanded into pairs
+(`expansion.py`, run by the CSV loader and by `scripts.import_kb_rules`). Their `rule_id` looks like
+`INT-0100/5-12`, and `details["class_rule"]` holds the curated rule (`INT-0100`), so an explanation can say
+the warning applies to the whole class.
+
 Combination products are checked through their active ingredients
 (`medication_info.active_ingredients`). Topical, eye and oral-gel products
 (names ending in `(topical)`, `(eye)`, `(oral gel)`) are excluded from this.

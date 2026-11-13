@@ -11,9 +11,11 @@ Typical use from the API layer:
 
 from .analyze import analyze, normalise_risk_factors
 from .db_loader import load_kb_from_db
+from .expansion import expand_class_interactions
 from .loader import DEFAULT_KB_DIR, KBValidationError, load_kb
 from .models import (
     AnalysisResult,
+    ClassInteractionRule,
     ConfirmedItem,
     KnowledgeBase,
     NotAnalysed,
@@ -22,7 +24,7 @@ from .models import (
 )
 
 __all__ = [
-    "AnalysisResult", "ConfirmedItem", "DEFAULT_KB_DIR", "KBValidationError",
+    "AnalysisResult", "ClassInteractionRule", "ConfirmedItem", "DEFAULT_KB_DIR", "KBValidationError",
     "KnowledgeBase", "NotAnalysed", "NotAssessed", "SafetyWarning",
-    "analyze", "load_kb", "load_kb_from_db", "normalise_risk_factors",
+    "analyze", "expand_class_interactions", "load_kb", "load_kb_from_db", "normalise_risk_factors",
 ]

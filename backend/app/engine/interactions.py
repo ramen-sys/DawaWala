@@ -42,6 +42,9 @@ def detect_interactions(
             if via != (a, b):
                 # Tell the explanation which ingredients the rule is really about.
                 details["via"] = list(kb.names(via))
+            if rule.parent_rule_id:
+                # Generated from a class-level rule, e.g. "warfarin x NSAID" (see expansion.py).
+                details["class_rule"] = rule.parent_rule_id
             warnings.append(
                 SafetyWarning(
                     category=DDI,

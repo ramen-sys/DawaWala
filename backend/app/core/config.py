@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     # FR-9: drug classes whose members count as a possible therapeutic duplication.
     # This is the single source of truth; scripts.import_kb_rules refuses to import if
     # knowledge_base/data/drug_classes.csv disagrees with it.
-    KB_VERSION: str = "1.0"
-    KB_UPDATED_ON: str = "2026-10-22"
+    KB_VERSION: str = "0.4.0"
+    KB_UPDATED_ON: str = "2026-11-13"
     DUPLICATION_RELEVANT_CLASSES: str = (
         "Analgesic / antipyretic,NSAID,Proton-pump inhibitor,H2-receptor antagonist,Antihistamine,"
         "Macrolide antibiotic,Penicillin antibiotic,Fluoroquinolone antibiotic,Cephalosporin antibiotic,"
@@ -56,12 +56,32 @@ class Settings(BaseSettings):
         "Cholinesterase inhibitor,Antimuscarinic"
     )
 
+    # FR-11 / SRS 5.5 Table 5.2: default risk-priority weights (QA-MNT-02: configuration, not code).
+    SCORE_SEVERITY_MINOR: int = 10
+    SCORE_SEVERITY_MODERATE: int = 30
+    SCORE_SEVERITY_MAJOR: int = 50
+    SCORE_SEVERITY_CONTRAINDICATED: int = 70
+    SCORE_DUPLICATE: int = 30  # same medication / same active ingredient twice
+    SCORE_THERAPEUTIC_DUPLICATE: int = 15
+    SCORE_CASCADE: int = 25
+    SCORE_PATIENT_FACTOR: int = 5  # per relevant supplied factor ...
+    SCORE_PATIENT_FACTOR_MAX: int = 15  # ... up to this many points
+    SCORE_MAX: int = 100
+    BAND_THRESHOLDS: str = "25,50,75"  # lower bounds of Moderate, High, Critical
+    KB_STALE_DAYS: int = 180  # SAF-07
+    EXPLANATION_MAX_WORDS: int = 150  # FR-13
+
     LOG_DIR: Path = BACKEND_DIR / "logs"
     AUTH_LOG_RETENTION_DAYS: int = 90
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def band_thresholds(self) -> tuple[int, int, int]:
+        moderate, high, critical = (int(v) for v in self.BAND_THRESHOLDS.split(","))
+        return moderate, high, critical
 
     @property
     def duplication_relevant_classes(self) -> set[str]:

@@ -39,6 +39,9 @@ def main() -> int:
     for name, have in counts.items():
         mark = "ok" if have >= TARGETS[name] else f"{have / TARGETS[name]:.0%}"
         print(f"{name:20}{have:>8}{TARGETS[name]:>8}   {mark}")
+    generated = sum(1 for rules in kb.interactions.values() for rule in rules if rule.parent_rule_id)
+    if generated:
+        print(f"\n{generated} of the interactions come from class-level rules.")
     return 0
 
 

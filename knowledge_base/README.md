@@ -36,7 +36,7 @@ Drug-drug interactions (FR-8), prescribing cascades (FR-12) and contraindication
 |---|---|
 | `data/medications.csv` | Medicines the rules refer to. Ones missing from the database are added. Existing ones keep their Kaggle class; only missing brand names are added. |
 | `data/drug_classes.csv` | Classes used by the curated files. `duplication_relevant` must agree with `DUPLICATION_RELEVANT_CLASSES` in `backend/app/core/config.py` (the single source of truth for FR-9), or the import stops. |
-| `data/interactions.csv` | FR-8 rules, one per pair of medicines. |
+| `data/interactions.csv` | FR-8 rules. Each side is one medicine (`drug_a` / `drug_b`) or a whole drug class (`drug_a_class` / `drug_b_class`); see *Class-level interaction rules* below. |
 | `data/contraindications.csv` | FR-10 rules for kidney, liver and age conditions. |
 | `data/cascades.csv` | FR-12 rules. Trigger and downstream sides may name medicines or classes; classes are expanded into every medicine of that class in the database at import time. |
 
@@ -46,6 +46,34 @@ Naming conventions:
 * Class names use the database's style: `NSAID`, `Proton-pump inhibitor`, `Calcium channel blocker`.
 * `relevant_factors` are `factor:value` tokens separated by `;`, e.g. `age_range:65_plus;kidney_function:impaired`. Each one the patient has adds +5 to the score (Table 5.2, max +15).
 * `rule_id` becomes the database `rule_code` and is shown on every warning, so never reuse one.
+
+## Class-level interaction rules
+
+Write a rule once for a whole class instead of once per pair. In each row, fill **either** `drug_a`
+**or** `drug_a_class` (likewise for `drug_b`):
+
+```csv
+rule_id,drug_a,drug_b,severity,description,relevant_factors,source,drug_a_class,drug_b_class
+INT-0100,warfarin,,Major,NSAIDs with warfarin raise bleeding risk.,age_range:65_plus,<source>,,NSAID
+INT-0101,,,Moderate,<description>,,<source>,Calcium channel blocker,Statin
+```
+
+`scripts.import_kb_rules` expands each class rule into one database row per medicine pair, using every
+medicine of that class in the database, including Kaggle ones that are not in `medications.csv`. The
+generated rule codes look like `INT-0100/5-12` (rule INT-0100 for medication ids 5 and 12), so every
+warning still traces back to the curated rule. Never use `/` in a `rule_id`.
+
+Precedence when several rules cover the same pair:
+
+1. A rule written for the exact pair always wins (e.g. INT-0002 warfarin + ibuprofen keeps its own wording).
+2. Medicine x class beats class x class.
+3. Two rules of the same kind covering one pair stop the import: add a rule for that exact pair or narrow one of them.
+
+Topical, eye and oral-gel products are never expanded. A combination product is skipped when one of its
+ingredients is already in the class (e.g. "Ibuprofen + Pseudoephedrine" is covered through ibuprofen), so
+the patient does not get the same warning twice. A class rule is reviewed once in `review/clinical_review.csv`.
+
+Re-run the import after adding medicines to a class used by a class-level rule.
 
 ## Import
 

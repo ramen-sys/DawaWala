@@ -16,3 +16,7 @@ Dopamine antagonist antiemetic,false
 Antiparkinson agent,false
 Cholinesterase inhibitor,true
 Antimuscarinic,true
+NMDA receptor antagonist,false
+Beta blocker,false
+Angiotensin receptor blocker,false
+Thiazide diuretic,false

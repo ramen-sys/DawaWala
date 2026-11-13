@@ -105,10 +105,22 @@ All endpoints are under `/api/v1`. Protected endpoints need `Authorization: Bear
 | PATCH / DELETE | `/medication-lists/{id}/items/{item_id}` | Edit or remove a medication |
 | GET | `/medications/search?q=` | Type-ahead suggestions from the knowledge base |
 | GET | `/medications/knowledge-base` | Knowledge-base version, date and coverage (SAF-07) |
+| GET / PUT | `/medication-lists/{id}/risk-factors` | FR-14: age range, kidney and liver function (omitted = `unknown`); a change marks earlier analyses `outdated` |
+| POST | `/medication-lists/{id}/analyses` | FR-8 to FR-15: analyse a **confirmed** list (`409 list_not_confirmed` otherwise, BR-01) and store the scored, explained warnings |
+| GET | `/medication-lists/{id}/analyses` | History of a list's analyses (newest first, with freshness and band counts) |
+| GET | `/medication-lists/{id}/analyses/{analysis_id}` | Reopen an analysis exactly as it ran |
+| POST | `/medications/knowledge-base/reload` | Admin: reload the rules after `scripts.import_kb_rules` without restarting |
 
 Authentication events and authorization failures (SEC-10) are stored in the `auth_events` table (user ID,
 event type, time, IP - never passwords, tokens or medications) and also written to `backend/logs/auth.log`.
 Both are kept for 90 days; the API deletes older `auth_events` rows at startup and then once a day.
+
+An analysis result contains the disclaimer, counts per severity band, warnings ranked by score (FR-11: score,
+then contraindication > DDI > cascade > duplicate, then name), each with its itemized score factors (Table 5.2
+weights in `app/core/config.py`) and a plain-language explanation (FR-13), plus "Not analysed" and "Not
+assessed" sections, the KB version/date and a stale-KB flag (SAF-07). Scoring lives in
+`app/services/scoring.py`, explanations in `app/services/explanations.py`. The knowledge base is loaded once
+per process on the first analysis and cached.
 
 Editing a confirmed list returns it to `draft` and marks earlier analyses `outdated` (FR-7, SAF-08).
 Typed names are passed to `app/services/normalization.py`, which currently resolves only exact

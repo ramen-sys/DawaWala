@@ -3,6 +3,10 @@
 The detectors keep using the in-memory records from models.py. This module
 only translates medications, drug_interactions, contraindications and
 cascade_rules into those records (BR-05: rules stay data).
+
+Class-level interaction rules reach the database already expanded by
+scripts.import_kb_rules (rule codes like "INT-0100/5-12"); the parent rule id is
+recovered from the code so explanations can say the rule covers a whole class.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from .models import (
     InteractionRule,
     KnowledgeBase,
     Medication,
+    parent_of,
     product_ingredients,
 )
 
@@ -126,7 +131,8 @@ def load_kb_from_db(
             continue
         low, high = sorted((row.drug_a_id, row.drug_b_id))
         interactions[(low, high)].append(
-            InteractionRule(row.rule_code, low, high, label, row.description, factors, row.source)
+            InteractionRule(row.rule_code, low, high, label, row.description, factors, row.source,
+                            parent_rule_id=parent_of(row.rule_code))
         )
 
     contraindications: dict[int, list[ContraindicationRule]] = defaultdict(list)

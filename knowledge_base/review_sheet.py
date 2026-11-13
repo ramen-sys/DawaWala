@@ -36,9 +36,18 @@ DECISIONS = {"approved", "changes_needed", "rejected"}
 
 def rules(kb) -> list[dict]:
     rows = []
-    for rule in sorted((r for rs in kb.interactions.values() for r in rs), key=lambda r: r.rule_id):
+    # Pairs generated from a class rule are reviewed once, as the class rule itself.
+    pair_rules = (r for rs in kb.interactions.values() for r in rs if r.parent_rule_id is None)
+    for rule in sorted(pair_rules, key=lambda r: r.rule_id):
         rows.append({"rule_id": rule.rule_id, "type": "interaction",
                      "rule": f"{kb.name(rule.drug_a)} + {kb.name(rule.drug_b)}",
+                     "severity": rule.severity, "factors": rule.relevant_factors,
+                     "description": rule.description, "source": rule.source})
+    for rule in kb.class_interactions:
+        sides = [kb.name(med) if med is not None else f"any {cls}"
+                 for med, cls in ((rule.a_medication, rule.a_class), (rule.b_medication, rule.b_class))]
+        rows.append({"rule_id": rule.rule_id, "type": "interaction (class)",
+                     "rule": " + ".join(sides),
                      "severity": rule.severity, "factors": rule.relevant_factors,
                      "description": rule.description, "source": rule.source})
     for rule in sorted((r for rs in kb.contraindications.values() for r in rs), key=lambda r: r.rule_id):

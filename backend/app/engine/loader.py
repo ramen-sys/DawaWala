@@ -17,16 +17,20 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
+from .expansion import expand_class_interactions
 from .models import (
+    EXPANDED_RULE_SEPARATOR,
     SEVERITIES,
     UNKNOWN,
     CascadeRule,
+    ClassInteractionRule,
     ContraindicationRule,
     DrugClass,
     Factor,
     InteractionRule,
     KnowledgeBase,
     Medication,
+    compute_components,
     product_ingredients,
 )
 
@@ -50,6 +54,13 @@ COLUMNS = {
         "downstream_medications", "downstream_classes",
         "description", "relevant_factors", "source",
     ],
+}
+
+# Columns a file may leave out (older files keep loading); a missing one reads as empty.
+# interactions.csv: fill drug_a_class instead of drug_a (or drug_b_class instead of drug_b)
+# to write one rule for a whole drug class.
+OPTIONAL_COLUMNS = {
+    "interactions.csv": ["drug_a_class", "drug_b_class"],
 }
 
 
@@ -88,6 +99,8 @@ def _read_csv(directory: Path, filename: str, errors: list[str]) -> list[tuple[i
             if not any((value or "").strip() for value in row.values()):
                 continue  # skip blank lines
             clean = {k: (v or "").strip() for k, v in row.items() if k is not None}
+            for column in OPTIONAL_COLUMNS.get(filename, ()):
+                clean.setdefault(column, "")
             rows.append((reader.line_num, clean))
         return rows
 
@@ -219,6 +232,10 @@ def load_kb(directory: str | Path = DEFAULT_KB_DIR) -> KnowledgeBase:
         if not rule_id:
             errors.append(f"{where}: rule_id is required")
             return False
+        if EXPANDED_RULE_SEPARATOR in rule_id:
+            # Reserved for ids generated from class rules ("INT-0100/5-12").
+            errors.append(f"{where}: rule_id must not contain '{EXPANDED_RULE_SEPARATOR}'")
+            return False
         if rule_id in seen_rule_ids:
             errors.append(f"{where}: rule_id {rule_id} is used twice")
             return False
@@ -232,24 +249,57 @@ def load_kb(directory: str | Path = DEFAULT_KB_DIR) -> KnowledgeBase:
         return True
 
     # ---- interactions (FR-8) ----------------------------------------------
+    # Each side names one medication (drug_a) or a whole drug class (drug_a_class).
+    def interaction_side(row: dict, side: str, where: str) -> tuple[int | None, str | None, bool]:
+        """(medication id, class name, ok) for one side of an interaction row."""
+        name, cls = row[side], row[f"{side}_class"]
+        if name and cls:
+            errors.append(f"{where}: give {side} or {side}_class, not both")
+            return None, None, False
+        if cls:
+            if cls not in classes:
+                errors.append(f"{where}: class '{cls}' is not in drug_classes.csv")
+                return None, None, False
+            return None, cls, True
+        if not name:
+            errors.append(f"{where}: {side} or {side}_class is required")
+            return None, None, False
+        med_id = resolve(name, where)
+        return med_id, None, med_id is not None
+
     interactions: dict[tuple[int, int], list[InteractionRule]] = defaultdict(list)
+    class_interactions: list[ClassInteractionRule] = []
     for line, row in _read_csv(directory, "interactions.csv", errors):
         where = f"interactions.csv line {line}"
         ok = check_rule_id(row["rule_id"], where)
-        a = resolve(row["drug_a"], where)
-        b = resolve(row["drug_b"], where)
+        a, a_class, a_ok = interaction_side(row, "drug_a", where)
+        b, b_class, b_ok = interaction_side(row, "drug_b", where)
         ok = check_severity(row["severity"], where) and ok
         factors = parse_factors(row["relevant_factors"], where)
         if a is not None and a == b:
             errors.append(f"{where}: a medication cannot interact with itself")
             continue
-        if not ok or a is None or b is None:
+        if not (ok and a_ok and b_ok):
+            continue
+        if a_class or b_class:
+            class_interactions.append(
+                ClassInteractionRule(row["rule_id"], a, a_class, b, b_class, row["severity"],
+                                     row["description"], factors, row["source"])
+            )
             continue
         low, high = sorted((a, b))
         interactions[(low, high)].append(
             InteractionRule(row["rule_id"], low, high, row["severity"],
                             row["description"], factors, row["source"])
         )
+
+    # Class rules become ordinary pair rules, so the detector needs no special case.
+    expanded, expansion_errors = expand_class_interactions(
+        class_interactions, medications, compute_components(medications), interactions
+    )
+    errors.extend(expansion_errors)
+    for rule in expanded:
+        interactions[(rule.drug_a, rule.drug_b)].append(rule)
 
     # ---- contraindications (FR-10) ----------------------------------------
     contraindications: dict[int, list[ContraindicationRule]] = defaultdict(list)
@@ -321,4 +371,5 @@ def load_kb(directory: str | Path = DEFAULT_KB_DIR) -> KnowledgeBase:
         interactions={k: tuple(v) for k, v in interactions.items()},
         contraindications={k: tuple(v) for k, v in contraindications.items()},
         cascades=tuple(sorted(cascades, key=lambda r: r.rule_id)),
+        class_interactions=tuple(sorted(class_interactions, key=lambda r: r.rule_id)),
     )

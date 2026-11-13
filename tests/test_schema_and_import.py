@@ -28,6 +28,12 @@ from tests.conftest import TEST_SCHEMA, unique_email
 # * medications.source / external_code         - data source (5.3) and optional external code (5.4)
 # * contraindications / cascade_rules           - patient-factor modifier (+5 each, Table 5.2), same
 #   .relevant_risk_factors                       "factor:value" format as drug_interactions
+# * analysis_results.kb_updated_on / risk_factors / not_analysed / not_assessed
+#                                               - a reopened analysis shows the KB date (SAF-07), the
+#                                                 factors used (FR-14) and the "Not analysed" / "Not
+#                                                 assessed" sections (FR-15, SAF-03) exactly as they ran
+# * warnings.severity_band / rank / details     - warning.severity_band (A.2), the FR-11 order, and the
+#                                                 rule severity and engine details shown with the warning
 # Helper tables: medication_aliases (Medication "Aliases/brand names"), cascade_rule_triggers /
 # cascade_rule_downstream (Cascade Rule "Triggering / Downstream medication(s)") and auth_events (SEC-10).
 SRS_TABLES = {
@@ -47,9 +53,10 @@ SRS_TABLES = {
     "cascade_rule_triggers": {"rule_id", "medication_id"},
     "cascade_rule_downstream": {"rule_id", "medication_id"},
     "risk_factors": {"id", "user_id", "list_id", "factor_type", "factor_value"},
-    "analysis_results": {"id", "list_id", "timestamp", "kb_version", "freshness"},
+    "analysis_results": {"id", "list_id", "timestamp", "kb_version", "freshness", "kb_updated_on",
+                         "risk_factors", "not_analysed", "not_assessed"},
     "warnings": {"id", "analysis_id", "category", "rule_reference", "related_medications", "score",
-                 "score_factors", "explanation"},
+                 "score_factors", "explanation", "severity_band", "rank", "details"},
     "auth_events": {"id", "user_id", "event_type", "ip_address", "created_at"},
 }
 

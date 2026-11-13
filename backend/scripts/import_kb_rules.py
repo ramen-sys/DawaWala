@@ -15,13 +15,18 @@ What it does:
   Kaggle class and source; only missing brand names are added as aliases.
 * Interactions, contraindications, cascades: upserted by rule_code. Rules removed from the CSVs
   are deleted (contraindications imported from the Kaggle dataset are never touched).
+* Interaction rules written against a drug class (drug_a_class / drug_b_class) are expanded into
+  one row per medication pair currently in the database, with rule codes like "INT-0100/5-12"
+  (see app/engine/expansion.py). A rule for the exact pair always wins.
 * Cascade rules written against a drug class are expanded into every medication of that class
-  currently in the database. Re-run this script after adding medications to such a class.
+  currently in the database. Re-run this script after adding medications to a class used by a
+  class-level interaction or cascade rule.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from collections import Counter
 from pathlib import Path
@@ -32,8 +37,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.engine.expansion import expand_class_interactions
 from app.engine.loader import DEFAULT_KB_DIR, KBValidationError, load_kb
-from app.engine.models import KnowledgeBase, format_factors
+from app.engine.models import KnowledgeBase, compute_components, format_factors, product_ingredients
+from app.engine.models import Medication as EngineMedication
 from app.models import CascadeRule, Contraindication, DrugInteraction, Medication, MedicationAlias
 from app.models.enums import FactorType, Severity
 from scripts.import_medicines import SOURCE as KAGGLE_SOURCE
@@ -74,6 +81,14 @@ def check_curated(kb: KnowledgeBase, duplication_relevant: set[str]) -> list[str
             errors.append(f"interactions.csv: {kb.name(a)} + {kb.name(b)} has {count} rules; "
                           "the database allows one rule per pair")
     return errors
+
+
+def _interaction_row(rule, low: int, high: int) -> dict:
+    return {
+        "rule_code": rule.rule_id, "drug_a_id": low, "drug_b_id": high,
+        "description": rule.description, "severity": Severity(rule.severity.lower()),
+        "relevant_risk_factors": list(format_factors(rule.relevant_factors)), "source": rule.source,
+    }
 
 
 def _upsert(db: Session, model, rows: list[dict], update: list[str]) -> None:
@@ -134,17 +149,39 @@ def import_rules(db: Session, kb: KnowledgeBase, duplication_relevant: set[str] 
             constraint="uq_medication_aliases_med_alias"))
 
     # 2. Interactions (FR-8) --------------------------------------------------------------
-    interactions = [rule for rules in kb.interactions.values() for rule in rules]
-    codes = [rule.rule_id for rule in interactions]
-    db.execute(delete(DrugInteraction).where(DrugInteraction.rule_code.not_in(codes)))
+    # Pair rules written in the CSV. Pairs the CSV loader generated from class rules are skipped:
+    # the class rules are expanded again below against every medication in the database.
+    interactions = [rule for rules in kb.interactions.values() for rule in rules if rule.parent_rule_id is None]
+    explicit_pairs = [tuple(sorted((db_id[rule.drug_a], db_id[rule.drug_b]))) for rule in interactions]
+    db_meds = {
+        row.id: EngineMedication(
+            row.id, row.standard_name, (row.drug_class,) if row.drug_class else (), (),
+            product_ingredients(row.standard_name, (row.medication_info or {}).get("active_ingredients")),
+        )
+        for row in existing.values()
+    }
+    class_rules = [
+        dataclasses.replace(
+            rule,
+            a_medication=None if rule.a_medication is None else db_id[rule.a_medication],
+            b_medication=None if rule.b_medication is None else db_id[rule.b_medication],
+        )
+        for rule in kb.class_interactions
+    ]
+    expanded, conflicts = expand_class_interactions(class_rules, db_meds, compute_components(db_meds), explicit_pairs)
+    if conflicts:
+        raise CuratedImportError(conflicts)
+    used = {rule.parent_rule_id for rule in expanded}
+    for rule in class_rules:
+        if rule.rule_id not in used:
+            notes.append(f"{rule.rule_id}: class rule matches no medication pair in the database yet")
+
     rows = []
     for rule in interactions:
         low, high = sorted((db_id[rule.drug_a], db_id[rule.drug_b]))
-        rows.append({
-            "rule_code": rule.rule_id, "drug_a_id": low, "drug_b_id": high,
-            "description": rule.description, "severity": Severity(rule.severity.lower()),
-            "relevant_risk_factors": list(format_factors(rule.relevant_factors)), "source": rule.source,
-        })
+        rows.append(_interaction_row(rule, low, high))
+    rows.extend(_interaction_row(rule, rule.drug_a, rule.drug_b) for rule in expanded)
+    db.execute(delete(DrugInteraction).where(DrugInteraction.rule_code.not_in([row["rule_code"] for row in rows])))
     _upsert(db, DrugInteraction, rows,
             ["drug_a_id", "drug_b_id", "description", "severity", "relevant_risk_factors", "source"])
 
@@ -209,6 +246,8 @@ def import_rules(db: Session, kb: KnowledgeBase, duplication_relevant: set[str] 
     return {
         "medications added": added,
         "interactions": len(interactions),
+        "class interaction rules": len(class_rules),
+        "interactions from class rules": len(expanded),
         "contraindications": len(contraindications),
         "cascade rules": len(kb.cascades),
     }

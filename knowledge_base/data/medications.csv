@@ -19,3 +19,8 @@ medication_id,standard_name,classes,aliases
 18,Levodopa + Carbidopa,Antiparkinson agent,Sinemet
 19,Donepezil,Cholinesterase inhibitor,Aricept
 20,Oxybutynin,Antimuscarinic,Ditropan
+21,Memantine,NMDA receptor antagonist,Ebixa
+22,Prochlorperazine,Dopamine antagonist antiemetic,Stemetil
+23,Atenolol,Beta blocker,Tenormin
+24,Losartan,Angiotensin receptor blocker,Cozaar
+25,Hydrochlorothiazide,Thiazide diuretic,

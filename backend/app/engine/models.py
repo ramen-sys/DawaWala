@@ -62,6 +62,26 @@ def product_ingredients(standard_name: str, stored: list[str] | tuple[str, ...] 
     return cleaned or ingredients_from_name(standard_name)
 
 
+def compute_components(medications: Mapping[int, "Medication"]) -> dict[int, tuple[int, ...]]:
+    """medication id -> ids of the *other* medications that are its active ingredients.
+
+    "Ibuprofen + Pseudoephedrine" -> (id of Ibuprofen,) when Ibuprofen is in the KB. A combination
+    product therefore inherits its ingredients' interaction, contraindication and cascade rules.
+    Only single-ingredient medications are used as components.
+    """
+    single = {
+        med.ingredients[0].lower(): med.medication_id
+        for med in medications.values()
+        if len(med.ingredients) == 1 and med.ingredients[0].lower() == med.standard_name.lower()
+    }
+    result = {}
+    for med in medications.values():
+        ids = sorted({single[i.lower()] for i in med.ingredients if i.lower() in single} - {med.medication_id})
+        if ids:
+            result[med.medication_id] = tuple(ids)
+    return result
+
+
 def matched_factors(
     factors: tuple[Factor, ...], patient: Mapping[str, str]
 ) -> tuple[str, ...]:
@@ -104,6 +124,49 @@ class InteractionRule:
     description: str
     relevant_factors: tuple[Factor, ...]
     source: str
+    # Set when this pair was generated from a class-level rule: the curated rule_id it came from
+    # ("INT-0100" for "INT-0100/5-12"). None for a rule written for this exact pair.
+    parent_rule_id: str | None = None
+
+
+# Separates a class-level rule's id from the medication pair in generated rule ids:
+# "INT-0100/5-12" is rule INT-0100 applied to medications 5 and 12. Curated ids must not contain it.
+EXPANDED_RULE_SEPARATOR = "/"
+
+
+def expanded_rule_id(parent_rule_id: str, low: int, high: int) -> str:
+    return f"{parent_rule_id}{EXPANDED_RULE_SEPARATOR}{low}-{high}"
+
+
+def parent_of(rule_id: str) -> str | None:
+    """"INT-0100/5-12" -> "INT-0100"; None for an id that was not generated from a class rule."""
+    parent, separator, _ = rule_id.partition(EXPANDED_RULE_SEPARATOR)
+    return parent if separator else None
+
+
+@dataclass(frozen=True)
+class ClassInteractionRule:
+    """An FR-8 rule written once for a whole drug class (BR-05, QA-MNT-01).
+
+    Each side is either one medication or a drug class, e.g. warfarin x NSAID or
+    NSAID x Anticoagulant. It is expanded into ordinary pair rules (see expansion.py), so
+    the detector and the one-rule-per-pair database table stay unchanged.
+    """
+
+    rule_id: str
+    a_medication: int | None
+    a_class: str | None
+    b_medication: int | None
+    b_class: str | None
+    severity: str
+    description: str
+    relevant_factors: tuple[Factor, ...]
+    source: str
+
+    @property
+    def specificity(self) -> int:
+        """Number of sides naming a single medication (2 = pair rule, 1 = medication x class, 0 = class x class)."""
+        return (self.a_medication is not None) + (self.b_medication is not None)
 
 
 @dataclass(frozen=True)
@@ -143,6 +206,9 @@ class KnowledgeBase:
     interactions: Mapping[tuple[int, int], tuple[InteractionRule, ...]]
     contraindications: Mapping[int, tuple[ContraindicationRule, ...]]
     cascades: tuple[CascadeRule, ...]
+    # Class-level FR-8 rules as curated. Already expanded into `interactions`; kept so the
+    # import can re-expand them against every medication in the database.
+    class_interactions: tuple[ClassInteractionRule, ...] = ()
 
     def interactions_for(self, a: int, b: int) -> tuple[InteractionRule, ...]:
         """Interaction records for an unordered pair of medications."""
@@ -151,23 +217,8 @@ class KnowledgeBase:
 
     @cached_property
     def components(self) -> Mapping[int, tuple[int, ...]]:
-        """medication id -> ids of the *other* medications that are its active ingredients.
-
-        "Ibuprofen + Pseudoephedrine" -> (id of Ibuprofen,) when Ibuprofen is in the KB. A combination
-        product therefore inherits its ingredients' interaction, contraindication and cascade rules.
-        Only single-ingredient medications are used as components.
-        """
-        single = {
-            med.ingredients[0].lower(): med.medication_id
-            for med in self.medications.values()
-            if len(med.ingredients) == 1 and med.ingredients[0].lower() == med.standard_name.lower()
-        }
-        result = {}
-        for med in self.medications.values():
-            ids = sorted({single[i.lower()] for i in med.ingredients if i.lower() in single} - {med.medication_id})
-            if ids:
-                result[med.medication_id] = tuple(ids)
-        return result
+        """medication id -> ids of the *other* medications that are its active ingredients (see compute_components)."""
+        return compute_components(self.medications)
 
     def with_components(self, medication_id: int) -> tuple[int, ...]:
         """The medication itself followed by its ingredient medications."""
