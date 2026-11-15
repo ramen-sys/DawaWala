@@ -1,0 +1,19 @@
+{
+  "_comment": "Release-1.0 defaults from SRS Section 5.5 and Appendix A.1. Review by a clinical reviewer (SAF-09) before real-world use.",
+  "score_max": 100,
+  "severity_points": {
+    "minor": 10,
+    "moderate": 30,
+    "major": 50,
+    "contraindicated": 70
+  },
+  "duplicate_points": 30,
+  "therapeutic_duplication_points": 15,
+  "cascade_points": 25,
+  "patient_factor_points": 5,
+  "patient_factor_max": 15,
+  "band_thresholds": [25, 50, 75],
+  "category_order": ["contraindication", "interaction", "cascade", "duplicate"],
+  "explanation_max_words": 150,
+  "kb_stale_days": 180
+}

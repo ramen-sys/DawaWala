@@ -35,6 +35,7 @@ A web-based medication-safety decision-support tool. Users can enter medications
 ```
 dawawala/
 ├── backend/          # API, authentication, medication lists, analysis endpoints
+│   └── dawawala_risk/ # Risk scoring and explanation module
 ├── frontend/         # React + Tailwind user interface
 ├── ocr/              # Image upload handling, OCR, NLP normalization, fuzzy matching
 ├── knowledge_base/   # Medication data, interaction rules, cascade rules
@@ -42,6 +43,11 @@ dawawala/
 ├── tests/            # Automated tests
 └── README.md
 ```
+
+The risk module tests can be run from `backend/` with
+`python -m unittest discover -s tests -t .`. Its demo is
+`python demo_risk.py`. The frontend can be run from `frontend/` with
+`npm install` followed by `npm run dev`.
 
 ## Getting Started
 

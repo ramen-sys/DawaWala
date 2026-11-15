@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Pharmacy-label palette. All text pairs meet WCAG AA (4.5:1), see
+     scripts/check-contrast.mjs. */
+  --color-ink: #14272e;
+  --color-ink-soft: #3f565d;
+  --color-paper: #f6f8f7;
+  --color-surface: #ffffff;
+  --color-line: #c5d2d2;
+  --color-brand: #0b6b6f;
+  --color-brand-dark: #084a4d;
+  --color-brand-tint: #e2f0f0;
+
+  /* Severity. Low is slate blue on purpose: green would read as "safe". */
+  --color-low: #1e5a7d;
+  --color-low-tint: #e4eff6;
+  --color-moderate: #6b4800;
+  --color-moderate-tint: #fff1cc;
+  --color-high: #9a3408;
+  --color-high-tint: #ffe6d8;
+  --color-critical: #9b0f27;
+  --color-critical-tint: #fde2e7;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-paper);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Visible keyboard focus everywhere (QA-USA-03). */
+:focus-visible {
+  outline: 3px solid var(--color-brand-dark);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  html { font-size: 12pt; background: #fff; }
+  body { background: #fff; }
+  a { color: inherit; text-decoration: none; }
+  article { break-inside: avoid; }
+}

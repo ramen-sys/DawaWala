@@ -1,0 +1,729 @@
+[
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 1,
+    "High": 1,
+    "Low": 1,
+    "Moderate": 2
+   },
+   "warnings": [
+    {
+     "band": "Critical",
+     "capped": false,
+     "category": "contraindication",
+     "explanation": "We found a possible concern about Metformin. The knowledge base says it may not be suitable for people with severe kidney problems. The concern is rated as contraindicated. This means the medicine is not usually meant to be used in this case. Your answer about impaired kidney function raised its priority score. Source: rule CI-0044, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_contraindicated",
+       "label": "Rule severity (contraindication): Contraindicated",
+       "points": 70
+      },
+      {
+       "code": "patient_kidney_impaired",
+       "label": "Patient factor: impaired kidney function",
+       "points": 5
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Metformin"
+     ],
+     "raw_total": 75,
+     "rule_id": "CI-0044",
+     "score": 75,
+     "severity": "contraindicated"
+    },
+    {
+     "band": "High",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between Warfarin and Aspirin. The knowledge base rates it as major. It may cause serious side effects or keep a medicine from working well. Both medicines can raise the risk of bleeding. Your answer about age 65 or over and impaired kidney function raised its priority score. Source: rule DDI-0012, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (interaction): Major",
+       "points": 50
+      },
+      {
+       "code": "patient_age_65_plus",
+       "label": "Patient factor: age 65 or over",
+       "points": 5
+      },
+      {
+       "code": "patient_kidney_impaired",
+       "label": "Patient factor: impaired kidney function",
+       "points": 5
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "raw_total": 60,
+     "rule_id": "DDI-0012",
+     "score": 60,
+     "severity": "major"
+    },
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "duplicate",
+     "explanation": "We found Paracetamol more than once in your list, possibly under different brand names. Taking the same medicine twice may give you too much of it. That can raise the chance of side effects. Source: rule DUP-001, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "duplicate_medication",
+       "label": "Duplicate medication (same medicine entered more than once)",
+       "points": 30
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Paracetamol"
+     ],
+     "raw_total": 30,
+     "rule_id": "DUP-001",
+     "score": 30,
+     "severity": null
+    },
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "cascade",
+     "explanation": "We found a possible prescribing cascade. Amlodipine may cause ankle swelling. Furosemide is sometimes used to treat that problem. A side effect can be mistaken for a new health problem. This may not apply to you. It is not a diagnosis. Source: rule CAS-003, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "cascade_pattern",
+       "label": "Possible prescribing-cascade pattern",
+       "points": 25
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Amlodipine",
+      "Furosemide"
+     ],
+     "raw_total": 25,
+     "rule_id": "CAS-003",
+     "score": 25,
+     "severity": null
+    },
+    {
+     "band": "Low",
+     "capped": false,
+     "category": "duplicate",
+     "explanation": "We found two medicines, Ibuprofen and Naproxen, that belong to the same drug class. Medicines in one class often do a similar job. Using both may give more of the same effect than intended. This is only a possible duplication. Source: rule TD-007, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "therapeutic_duplication",
+       "label": "Possible therapeutic duplication (same drug class)",
+       "points": 15
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Ibuprofen",
+      "Naproxen"
+     ],
+     "raw_total": 15,
+     "rule_id": "TD-007",
+     "score": 15,
+     "severity": null
+    }
+   ]
+  },
+  "name": "mixed_with_patient",
+  "payload": {
+   "patient_factors": {
+    "age_range": "65_plus",
+    "kidney_function": "impaired"
+   },
+   "warnings": [
+    {
+     "category": "interaction",
+     "description": "Both medicines can raise the risk of bleeding.",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "relevant_factors": [
+      "age_65_plus",
+      "kidney_impaired"
+     ],
+     "rule_id": "DDI-0012",
+     "severity": "major"
+    },
+    {
+     "category": "contraindication",
+     "condition": "severe kidney problems",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Metformin"
+     ],
+     "relevant_factors": [
+      "kidney_impaired"
+     ],
+     "rule_id": "CI-0044",
+     "severity": "contraindicated"
+    },
+    {
+     "category": "duplicate",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Paracetamol"
+     ],
+     "rule_id": "DUP-001"
+    },
+    {
+     "category": "duplicate",
+     "duplicate_kind": "therapeutic",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Ibuprofen",
+      "Naproxen"
+     ],
+     "rule_id": "TD-007"
+    },
+    {
+     "category": "cascade",
+     "downstream": "Furosemide",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Amlodipine",
+      "Furosemide"
+     ],
+     "rule_id": "CAS-003",
+     "symptom_pattern": "ankle swelling",
+     "trigger": "Amlodipine"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 0,
+    "High": 1,
+    "Low": 1,
+    "Moderate": 0
+   },
+   "warnings": [
+    {
+     "band": "High",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between Warfarin and Aspirin. The knowledge base rates it as major. It may cause serious side effects or keep a medicine from working well. Source: rule DDI-1, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (interaction): Major",
+       "points": 50
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "raw_total": 50,
+     "rule_id": "DDI-1",
+     "score": 50,
+     "severity": "major"
+    },
+    {
+     "band": "Low",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between Digoxin and Amiodarone. The knowledge base rates it as minor. The effect is usually small. Source: rule DDI-2, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_minor",
+       "label": "Rule severity (interaction): Minor",
+       "points": 10
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Digoxin",
+      "Amiodarone"
+     ],
+     "raw_total": 10,
+     "rule_id": "DDI-2",
+     "score": 10,
+     "severity": "minor"
+    }
+   ]
+  },
+  "name": "no_patient_info",
+  "payload": {
+   "warnings": [
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "relevant_factors": [
+      "age_65_plus",
+      "kidney_impaired",
+      "liver_impaired"
+     ],
+     "rule_id": "DDI-1",
+     "severity": "major"
+    },
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Digoxin",
+      "Amiodarone"
+     ],
+     "rule_id": "DDI-2",
+     "severity": "minor"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 1,
+    "High": 0,
+    "Low": 0,
+    "Moderate": 0
+   },
+   "warnings": [
+    {
+     "band": "Critical",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between A, B and C. The knowledge base rates it as contraindicated. These medicines are not usually meant to be used together. Your answer about age 65 or over, impaired kidney function and impaired liver function raised its priority score. Source: rule DDI-3, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_contraindicated",
+       "label": "Rule severity (interaction): Contraindicated",
+       "points": 70
+      },
+      {
+       "code": "patient_age_65_plus",
+       "label": "Patient factor: age 65 or over",
+       "points": 5
+      },
+      {
+       "code": "patient_kidney_impaired",
+       "label": "Patient factor: impaired kidney function",
+       "points": 5
+      },
+      {
+       "code": "patient_liver_impaired",
+       "label": "Patient factor: impaired liver function",
+       "points": 5
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "A",
+      "B",
+      "C"
+     ],
+     "raw_total": 85,
+     "rule_id": "DDI-3",
+     "score": 85,
+     "severity": "contraindicated"
+    }
+   ]
+  },
+  "name": "three_factors_and_cap_free",
+  "payload": {
+   "patient_factors": {
+    "age_range": "65_plus",
+    "kidney_function": "impaired",
+    "liver_function": "impaired"
+   },
+   "warnings": [
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "A",
+      "B",
+      "C"
+     ],
+     "relevant_factors": [
+      "age_65_plus",
+      "kidney_impaired",
+      "liver_impaired"
+     ],
+     "rule_id": "DDI-3",
+     "severity": "contraindicated"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 0,
+    "High": 0,
+    "Low": 0,
+    "Moderate": 1
+   },
+   "warnings": [
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "cascade",
+     "explanation": "We found a possible prescribing cascade. The medicines involved are Amlodipine and Furosemide. A side effect can be mistaken for a new health problem. This may not apply to you. It is not a diagnosis. Your answer about impaired liver function raised its priority score. Source: rule CAS-9, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "cascade_pattern",
+       "label": "Possible prescribing-cascade pattern",
+       "points": 25
+      },
+      {
+       "code": "patient_liver_impaired",
+       "label": "Patient factor: impaired liver function",
+       "points": 5
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Amlodipine",
+      "Furosemide"
+     ],
+     "raw_total": 30,
+     "rule_id": "CAS-9",
+     "score": 30,
+     "severity": null
+    }
+   ]
+  },
+  "name": "cascade_one_factor",
+  "payload": {
+   "patient_factors": {
+    "liver_function": "impaired"
+   },
+   "warnings": [
+    {
+     "category": "cascade",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Amlodipine",
+      "Furosemide"
+     ],
+     "relevant_factors": [
+      "liver_impaired"
+     ],
+     "rule_id": "CAS-9"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 0,
+    "High": 4,
+    "Low": 0,
+    "Moderate": 0
+   },
+   "warnings": [
+    {
+     "band": "High",
+     "capped": false,
+     "category": "contraindication",
+     "explanation": "We found a possible concern about Zolpidem. The knowledge base says it may not be suitable for you. The concern is rated as major. It may raise the risk of harm. Source: rule R4, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (contraindication): Major",
+       "points": 50
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Zolpidem"
+     ],
+     "raw_total": 50,
+     "rule_id": "R4",
+     "score": 50,
+     "severity": "major"
+    },
+    {
+     "band": "High",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between amlodipine and Zinc. The knowledge base rates it as major. It may cause serious side effects or keep a medicine from working well. Source: rule R2, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (interaction): Major",
+       "points": 50
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "amlodipine",
+      "Zinc"
+     ],
+     "raw_total": 50,
+     "rule_id": "R2",
+     "score": 50,
+     "severity": "major"
+    },
+    {
+     "band": "High",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between Warfarin and Aspirin. The knowledge base rates it as major. It may cause serious side effects or keep a medicine from working well. Source: rule R1, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (interaction): Major",
+       "points": 50
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "raw_total": 50,
+     "rule_id": "R1",
+     "score": 50,
+     "severity": "major"
+    },
+    {
+     "band": "High",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between Digoxin and Ibuprofen. The knowledge base rates it as major. It may cause serious side effects or keep a medicine from working well. Source: rule R3, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_major",
+       "label": "Rule severity (interaction): Major",
+       "points": 50
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Digoxin",
+      "Ibuprofen"
+     ],
+     "raw_total": 50,
+     "rule_id": "R3",
+     "score": 50,
+     "severity": "major"
+    }
+   ]
+  },
+  "name": "ties_and_alphabetical",
+  "payload": {
+   "warnings": [
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Warfarin",
+      "Aspirin"
+     ],
+     "rule_id": "R1",
+     "severity": "major"
+    },
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "amlodipine",
+      "Zinc"
+     ],
+     "rule_id": "R2",
+     "severity": "major"
+    },
+    {
+     "category": "interaction",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Digoxin",
+      "Ibuprofen"
+     ],
+     "rule_id": "R3",
+     "severity": "major"
+    },
+    {
+     "category": "contraindication",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "Zolpidem"
+     ],
+     "rule_id": "R4",
+     "severity": "major"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 0,
+    "High": 0,
+    "Low": 1,
+    "Moderate": 3
+   },
+   "warnings": [
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between A and B. The knowledge base rates it as moderate. It may change how well a medicine works, or add side effects. Source: rule D1, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_moderate",
+       "label": "Rule severity (interaction): Moderate",
+       "points": 30
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "A",
+      "B"
+     ],
+     "raw_total": 30,
+     "rule_id": "D1",
+     "score": 30,
+     "severity": "moderate"
+    },
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "interaction",
+     "explanation": "We found a possible interaction between C and D. The knowledge base rates it as moderate. It may change how well a medicine works, or add side effects. Sentence number 0 is here. Sentence number 1 is here. Sentence number 2 is here. Sentence number 3 is here. Sentence number 4 is here. Sentence number 5 is here. Sentence number 6 is here. Sentence number 7 is here. Sentence number 8 is here. Sentence number 9 is here. Sentence number 10 is here. Sentence number 11 is here. Sentence number 12 is here. Sentence number 13 is here. Sentence number 14 is here. Sentence number 15 is here. Sentence number 16 is here. Sentence number 17 is here. Sentence number 18 is here. Sentence number 19 is here. Sentence number 20 is here. Source: rule D2, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_moderate",
+       "label": "Rule severity (interaction): Moderate",
+       "points": 30
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "C",
+      "D"
+     ],
+     "raw_total": 30,
+     "rule_id": "D2",
+     "score": 30,
+     "severity": "moderate"
+    },
+    {
+     "band": "Moderate",
+     "capped": false,
+     "category": "cascade",
+     "explanation": "We found a possible prescribing cascade. The medicines involved are F, G and H. A side effect can be mistaken for a new health problem. This may not apply to you. It is not a diagnosis. Source: rule D4, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "cascade_pattern",
+       "label": "Possible prescribing-cascade pattern",
+       "points": 25
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "F",
+      "G",
+      "H"
+     ],
+     "raw_total": 25,
+     "rule_id": "D4",
+     "score": 25,
+     "severity": null
+    },
+    {
+     "band": "Low",
+     "capped": false,
+     "category": "contraindication",
+     "explanation": "We found a possible concern about E. The knowledge base says it may not be suitable for you. The concern is rated as minor. It may add mild side effects. Source: rule D3, knowledge base version KB-1.0.0. Please discuss this with your doctor or pharmacist.",
+     "factors": [
+      {
+       "code": "severity_minor",
+       "label": "Rule severity (contraindication): Minor",
+       "points": 10
+      }
+     ],
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "E"
+     ],
+     "raw_total": 10,
+     "rule_id": "D3",
+     "score": 10,
+     "severity": "minor"
+    }
+   ]
+  },
+  "name": "description_filtered",
+  "payload": {
+   "warnings": [
+    {
+     "category": "interaction",
+     "description": "Stop taking warfarin if bruising.",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "A",
+      "B"
+     ],
+     "rule_id": "D1",
+     "severity": "moderate"
+    },
+    {
+     "category": "interaction",
+     "description": "Sentence number 0 is here. Sentence number 1 is here. Sentence number 2 is here. Sentence number 3 is here. Sentence number 4 is here. Sentence number 5 is here. Sentence number 6 is here. Sentence number 7 is here. Sentence number 8 is here. Sentence number 9 is here. Sentence number 10 is here. Sentence number 11 is here. Sentence number 12 is here. Sentence number 13 is here. Sentence number 14 is here. Sentence number 15 is here. Sentence number 16 is here. Sentence number 17 is here. Sentence number 18 is here. Sentence number 19 is here. Sentence number 20 is here. Sentence number 21 is here. Sentence number 22 is here. Sentence number 23 is here. Sentence number 24 is here. Sentence number 25 is here. Sentence number 26 is here. Sentence number 27 is here. Sentence number 28 is here. Sentence number 29 is here. Sentence number 30 is here. Sentence number 31 is here. Sentence number 32 is here. Sentence number 33 is here. Sentence number 34 is here. Sentence number 35 is here. Sentence number 36 is here. Sentence number 37 is here. Sentence number 38 is here. Sentence number 39 is here. Sentence number 40 is here. Sentence number 41 is here. Sentence number 42 is here. Sentence number 43 is here. Sentence number 44 is here. Sentence number 45 is here. Sentence number 46 is here. Sentence number 47 is here. Sentence number 48 is here. Sentence number 49 is here. Sentence number 50 is here. Sentence number 51 is here. Sentence number 52 is here. Sentence number 53 is here. Sentence number 54 is here. Sentence number 55 is here. Sentence number 56 is here. Sentence number 57 is here. Sentence number 58 is here. Sentence number 59 is here.",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "C",
+      "D"
+     ],
+     "rule_id": "D2",
+     "severity": "moderate"
+    },
+    {
+     "category": "contraindication",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "E"
+     ],
+     "rule_id": "D3",
+     "severity": "minor"
+    },
+    {
+     "category": "cascade",
+     "kb_version": "KB-1.0.0",
+     "medicines": [
+      "F",
+      "G",
+      "H"
+     ],
+     "rule_id": "D4"
+    }
+   ]
+  }
+ },
+ {
+  "expected": {
+   "band_counts": {
+    "Critical": 0,
+    "High": 0,
+    "Low": 0,
+    "Moderate": 0
+   },
+   "warnings": []
+  },
+  "name": "empty",
+  "payload": {
+   "warnings": []
+  }
+ }
+]
