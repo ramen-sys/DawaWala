@@ -1,0 +1,5 @@
+{
+  "version": "0.4.0",
+  "updated": "2026-11-13",
+  "note": "Added the rules named in the clinical-review notes (INT-0016, memantine, prochlorperazine, broader CAS-0004 classes). Not yet clinically approved (SAF-09): see knowledge_base/review/. Must match KB_VERSION / KB_UPDATED_ON in backend/app/core/config.py."
+}

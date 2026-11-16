@@ -1,0 +1,136 @@
+import secrets
+from datetime import datetime
+
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.models.enums import (
+    ConfirmationFlag,
+    ConfirmationStatus,
+    FactorType,
+    ListSource,
+    OcrStatus,
+    enum_column,
+    factor_pair_check_sql,
+)
+
+
+def random_file_reference(extension: str = "") -> str:
+    """Create an opaque server-side reference without using the user's filename."""
+    suffix = f".{extension.lstrip('.').lower()}" if extension else ""
+    return secrets.token_hex(16) + suffix
+
+
+class MedicationList(Base):
+    """A user's medication list (FR-3). Starts as draft; analysis only runs on a confirmed list (BR-01)."""
+
+    __tablename__ = "medication_lists"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(sa.ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    source: Mapped[ListSource] = mapped_column(enum_column(ListSource, "list_source"), default=ListSource.MANUAL)
+    confirmation_status: Mapped[ConfirmationStatus] = mapped_column(
+        enum_column(ConfirmationStatus, "confirmation_status"), default=ConfirmationStatus.DRAFT
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now())
+
+    user: Mapped["User"] = relationship(back_populates="medication_lists")  # noqa: F821
+    items: Mapped[list["MedicationListItem"]] = relationship(
+        back_populates="medication_list",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="MedicationListItem.id",
+    )
+    images: Mapped[list["PrescriptionImage"]] = relationship(
+        back_populates="medication_list", cascade="all, delete-orphan", passive_deletes=True
+    )
+    risk_factors: Mapped[list["RiskFactor"]] = relationship(
+        back_populates="medication_list", cascade="all, delete-orphan", passive_deletes=True
+    )
+    analyses: Mapped[list["AnalysisResult"]] = relationship(  # noqa: F821
+        back_populates="medication_list", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class MedicationListItem(Base):
+    """One entered or OCR-extracted name. medication_id stays NULL until the name is matched to the KB."""
+
+    __tablename__ = "medication_list_items"
+    __table_args__ = (
+        sa.CheckConstraint("match_score IS NULL OR (match_score >= 0 AND match_score <= 100)", name="match_score_range"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_id: Mapped[int] = mapped_column(sa.ForeignKey("medication_lists.id", ondelete="CASCADE"), index=True)
+    medication_id: Mapped[int | None] = mapped_column(
+        sa.ForeignKey("medications.id", ondelete="SET NULL"), index=True
+    )
+    # Text, not String(100): OCR lines can be longer. The 2-100 character limit of FR-3 is
+    # enforced for typed names by the API schema (clean_medication_name).
+    raw_text: Mapped[str] = mapped_column(sa.Text)
+    match_score: Mapped[int | None]
+    confirmation_flag: Mapped[ConfirmationFlag] = mapped_column(
+        enum_column(ConfirmationFlag, "confirmation_flag"), default=ConfirmationFlag.UNRESOLVED
+    )
+
+    medication_list: Mapped[MedicationList] = relationship(back_populates="items")
+    medication: Mapped["Medication | None"] = relationship()  # noqa: F821
+
+
+class PrescriptionImage(Base):
+    """Metadata for an image processed in memory; the original upload is not retained."""
+
+    __tablename__ = "prescription_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_id: Mapped[int] = mapped_column(sa.ForeignKey("medication_lists.id", ondelete="CASCADE"), index=True)
+    # Opaque reference for this upload; no original filename or image bytes are stored.
+    file_reference: Mapped[str] = mapped_column(sa.String(255), unique=True, default=random_file_reference)
+    uploaded_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now())
+    ocr_status: Mapped[OcrStatus] = mapped_column(enum_column(OcrStatus, "ocr_status"), default=OcrStatus.PENDING)
+
+    medication_list: Mapped[MedicationList] = relationship(back_populates="images")
+    extraction: Mapped["OcrExtractionResult | None"] = relationship(
+        back_populates="image", cascade="all, delete-orphan", passive_deletes=True, uselist=False
+    )
+
+
+class OcrExtractionResult(Base):
+    """Text and candidate names that OCR (FR-5) extracted from one image."""
+
+    __tablename__ = "ocr_extraction_results"
+    __table_args__ = (
+        sa.CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 100)", name="confidence_range"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("prescription_images.id", ondelete="CASCADE"), unique=True
+    )
+    raw_text: Mapped[str] = mapped_column(sa.Text, default="")
+    candidates: Mapped[list[dict]] = mapped_column(JSONB, default=list, server_default="[]")
+    # Integer 0-100, the same scale as medication_list_items.match_score.
+    confidence: Mapped[int | None]
+
+    image: Mapped[PrescriptionImage] = relationship(back_populates="extraction")
+
+
+class RiskFactor(Base):
+    """Optional patient factor for one list (FR-14), e.g. age_range = 65_plus. Defaults to "unknown"."""
+
+    __tablename__ = "risk_factors"
+    __table_args__ = (
+        sa.UniqueConstraint("list_id", "factor_type", name="uq_risk_factors_list_factor"),
+        # Same allowed (type, value) pairs as contraindications, so the two always line up.
+        sa.CheckConstraint(factor_pair_check_sql(), name="factor_value_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(sa.ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    list_id: Mapped[int] = mapped_column(sa.ForeignKey("medication_lists.id", ondelete="CASCADE"), index=True)
+    factor_type: Mapped[FactorType] = mapped_column(enum_column(FactorType, "factor_type"))
+    factor_value: Mapped[str] = mapped_column(sa.String(50), default="unknown")
+
+    medication_list: Mapped[MedicationList] = relationship(back_populates="risk_factors")

@@ -1,0 +1,4 @@
+factor,allowed_values
+age_range,under_18;18_64;65_plus
+kidney_function,normal;impaired
+liver_function,normal;impaired

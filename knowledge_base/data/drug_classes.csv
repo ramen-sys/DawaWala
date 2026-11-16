@@ -1,0 +1,22 @@
+class_name,duplication_relevant
+Analgesic / antipyretic,true
+NSAID,true
+Salicylate,false
+Antiplatelet,false
+Anticoagulant,true
+Biguanide,false
+Calcium channel blocker,true
+ACE inhibitor,true
+Loop diuretic,true
+Potassium-sparing diuretic,false
+Statin,true
+Macrolide antibiotic,true
+Proton-pump inhibitor,true
+Dopamine antagonist antiemetic,false
+Antiparkinson agent,false
+Cholinesterase inhibitor,true
+Antimuscarinic,true
+NMDA receptor antagonist,false
+Beta blocker,false
+Angiotensin receptor blocker,false
+Thiazide diuretic,false

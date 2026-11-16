@@ -1,0 +1,16 @@
+rule_id,drug_a,drug_b,severity,description,relevant_factors,source
+INT-0001,warfarin,aspirin,Major,"Taking these together increases the risk of serious bleeding.",age_range:65_plus,seed-unverified
+INT-0002,warfarin,ibuprofen,Major,"Ibuprofen with warfarin increases the risk of serious bleeding, including in the stomach.",age_range:65_plus,seed-unverified
+INT-0003,warfarin,naproxen,Major,"Naproxen with warfarin increases the risk of serious bleeding, including in the stomach.",age_range:65_plus,seed-unverified
+INT-0004,warfarin,clopidogrel,Major,"Using two blood-thinning medicines together increases the risk of serious bleeding.",age_range:65_plus,seed-unverified
+INT-0005,simvastatin,clarithromycin,Contraindicated,"Clarithromycin greatly raises simvastatin levels, increasing the risk of severe muscle damage.",age_range:65_plus;kidney_function:impaired,seed-unverified
+INT-0006,atorvastatin,clarithromycin,Moderate,"Clarithromycin raises atorvastatin levels, which can increase the risk of muscle side effects.",age_range:65_plus,seed-unverified
+INT-0007,lisinopril,spironolactone,Major,"Both medicines can raise potassium; together they can cause dangerously high potassium levels.",kidney_function:impaired;age_range:65_plus,seed-unverified
+INT-0008,ibuprofen,lisinopril,Moderate,"Ibuprofen can weaken the blood-pressure-lowering effect of lisinopril, and together they can harm the kidneys.",kidney_function:impaired;age_range:65_plus,seed-unverified
+INT-0009,naproxen,lisinopril,Moderate,"Naproxen can weaken the blood-pressure-lowering effect of lisinopril, and together they can harm the kidneys.",kidney_function:impaired;age_range:65_plus,seed-unverified
+INT-0010,clopidogrel,omeprazole,Moderate,"Omeprazole can reduce how well clopidogrel is activated in the body, which may make it less effective.",,seed-unverified
+INT-0011,metoclopramide,levodopa-carbidopa,Major,"Metoclopramide blocks dopamine and can counteract levodopa, which may worsen Parkinson's symptoms.",age_range:65_plus,seed-unverified
+INT-0012,aspirin,ibuprofen,Moderate,"Ibuprofen may interfere with the heart-protective effect of low-dose aspirin, and together they raise the risk of stomach bleeding.",age_range:65_plus,seed-unverified
+INT-0013,aspirin,clopidogrel,Moderate,"Together these increase the risk of bleeding. They are often prescribed together on purpose, so discuss this with your doctor.",age_range:65_plus,seed-unverified
+INT-0014,furosemide,ibuprofen,Moderate,"Ibuprofen can reduce the effect of furosemide and increase the risk of kidney problems.",kidney_function:impaired,seed-unverified
+INT-0015,donepezil,oxybutynin,Moderate,"These medicines have opposite effects on the same body signals, so each may work less well.",age_range:65_plus,seed-unverified
